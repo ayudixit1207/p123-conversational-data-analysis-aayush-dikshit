@@ -2,10 +2,26 @@ import streamlit as st
 import pandas as pd
 import os
 import ast
+import subprocess
+import tempfile
+import pickle
+import sys
 
 from dotenv import load_dotenv
 from groq import Groq
 
+from database import (
+    create_session,
+    save_dataset,
+    save_query,
+    save_unsafe_attempt,
+    get_history
+)
+
+
+# -------------------------
+# Load Environment
+# -------------------------
 
 load_dotenv()
 
@@ -15,10 +31,28 @@ if groq_key:
     groq = Groq(api_key=groq_key)
 
 
+# -------------------------
+# Page Settings
+# -------------------------
+
 st.set_page_config(
     page_title="Conversational Data Analysis Assistant",
     layout="wide"
 )
+
+
+# -------------------------
+# Session
+# -------------------------
+
+if "session_id" not in st.session_state:
+
+    st.session_state.session_id = create_session()
+
+
+if "saved_file" not in st.session_state:
+
+    st.session_state.saved_file = None
 
 
 # -------------------------
@@ -28,20 +62,28 @@ st.set_page_config(
 def check_code(code):
 
     try:
+
         tree = ast.parse(code)
+
     except:
-        return False
+
+        return False, "Invalid Python code"
+
 
     for node in ast.walk(tree):
 
         # Block imports
         if isinstance(node, ast.Import):
-            return False
+
+            return False, "Import statement is not allowed"
+
 
         if isinstance(node, ast.ImportFrom):
-            return False
 
-        # Check function calls
+            return False, "Import statement is not allowed"
+
+
+        # Block dangerous functions
         if isinstance(node, ast.Call):
 
             if isinstance(node.func, ast.Name):
@@ -52,7 +94,12 @@ def check_code(code):
                     "open",
                     "__import__"
                 ]:
-                    return False
+
+                    return False, (
+                        node.func.id
+                        + " is not allowed"
+                    )
+
 
             if isinstance(node.func, ast.Attribute):
 
@@ -60,19 +107,131 @@ def check_code(code):
                     "system",
                     "popen"
                 ]:
-                    return False
+
+                    return False, (
+                        node.func.attr
+                        + " is not allowed"
+                    )
+
 
         # Block private attributes
         if isinstance(node, ast.Attribute):
 
             if node.attr.startswith("__"):
-                return False
 
-    return True
+                return False, (
+                    "Private attributes are not allowed"
+                )
+
+
+    return True, "Safe"
 
 
 # -------------------------
-# UI
+# Safe Execution
+# -------------------------
+
+def run_safely(code, df):
+
+    temp_folder = tempfile.mkdtemp()
+
+    input_file = os.path.join(
+        temp_folder,
+        "data.pkl"
+    )
+
+    output_file = os.path.join(
+        temp_folder,
+        "result.pkl"
+    )
+
+    code_file = input_file + ".code"
+
+
+    # Save dataframe
+    with open(
+        input_file,
+        "wb"
+    ) as file:
+
+        pickle.dump(
+            df,
+            file
+        )
+
+
+    # Save generated code
+    with open(
+        code_file,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        file.write(code)
+
+
+    # Start executor
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "executor.py",
+            input_file,
+            output_file
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+
+    try:
+
+        process.communicate(
+            timeout=5
+        )
+
+
+    except subprocess.TimeoutExpired:
+
+        process.kill()
+
+        process.communicate()
+
+        return False, "Code execution timed out."
+
+
+    # Check output file
+    if not os.path.exists(output_file):
+
+        return False, "Execution failed."
+
+
+    try:
+
+        with open(
+            output_file,
+            "rb"
+        ) as file:
+
+            data = pickle.load(file)
+
+
+        if data["success"]:
+
+            return True, data["result"]
+
+        else:
+
+            return False, data["error"]
+
+
+    except Exception as error:
+
+        return False, str(error)
+
+
+# -------------------------
+# UI Styling
 # -------------------------
 
 st.markdown("""
@@ -86,6 +245,7 @@ st.markdown("""
 .block-container {
     max-width: 1250px;
     padding-top: 2rem;
+    padding-right: 2rem;
 }
 
 .title {
@@ -106,12 +266,22 @@ st.markdown("""
     margin-bottom: 12px;
 }
 
+section[data-testid="stSidebar"] {
+    background-color: #101722;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 
+# -------------------------
+# Title
+# -------------------------
+
 st.markdown(
-    '<div class="title">Conversational Data Analysis Assistant</div>',
+    '<div class="title">'
+    'Conversational Data Analysis Assistant'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -124,13 +294,16 @@ st.markdown(
 
 
 # -------------------------
-# Upload CSV
+# Upload Dataset
 # -------------------------
 
 st.markdown(
-    '<div class="section">Upload your dataset</div>',
+    '<div class="section">'
+    'Upload your dataset'
+    '</div>',
     unsafe_allow_html=True
 )
+
 
 file = st.file_uploader(
     "Choose a CSV file",
@@ -138,14 +311,23 @@ file = st.file_uploader(
 )
 
 
+# -------------------------
+# Dataset Processing
+# -------------------------
+
 if file:
 
     try:
 
-        # Find actual header row
+        # -------------------------
+        # Find Header Row
+        # -------------------------
+
         file.seek(0)
 
-        text = file.read(5000).decode(
+        text = file.read(
+            5000
+        ).decode(
             "utf-8",
             errors="ignore"
         )
@@ -156,17 +338,22 @@ if file:
 
         header = 0
 
+
         for i, line in enumerate(lines):
 
             if (
                 "temperature" in line.lower()
                 and "rh" in line.lower()
             ):
+
                 header = i
                 break
 
 
+        # -------------------------
         # Read CSV
+        # -------------------------
+
         file.seek(0)
 
         df = pd.read_csv(
@@ -177,23 +364,34 @@ if file:
         )
 
 
-        # Clean column names
-        df.columns = df.columns.str.strip()
+        # -------------------------
+        # Clean Columns
+        # -------------------------
+
+        df.columns = (
+            df.columns
+            .str.strip()
+        )
 
 
-        # Remove empty rows and columns
+        # Remove empty rows
         df = df.dropna(
             axis=0,
             how="all"
         )
 
+
+        # Remove empty columns
         df = df.dropna(
             axis=1,
             how="all"
         )
 
 
-        # Clean object columns
+        # -------------------------
+        # Clean Object Columns
+        # -------------------------
+
         for col in df.columns:
 
             if df[col].dtype == "object":
@@ -205,26 +403,46 @@ if file:
                 )
 
                 df[col] = df[col].replace(
-                    ["nan", "NaN", ""],
+                    [
+                        "nan",
+                        "NaN",
+                        ""
+                    ],
                     None
                 )
 
 
-        # Convert numeric columns
+        # -------------------------
+        # Convert Numeric Columns
+        # -------------------------
+
         for col in df.columns:
 
-            if col in ["day", "month", "Classes"]:
+            if col in [
+                "day",
+                "month",
+                "Classes"
+            ]:
+
                 continue
+
 
             numbers = pd.to_numeric(
                 df[col],
                 errors="coerce"
             )
 
+
             total = df[col].notna().sum()
+
             valid = numbers.notna().sum()
 
-            if total > 0 and valid / total >= 0.8:
+
+            if (
+                total > 0
+                and valid / total >= 0.8
+            ):
+
                 df[col] = numbers
 
 
@@ -234,34 +452,68 @@ if file:
 
 
         # -------------------------
+        # Save Dataset
+        # -------------------------
+
+        if (
+            st.session_state.saved_file
+            != file.name
+        ):
+
+            save_dataset(
+                file.name,
+                len(df),
+                len(df.columns)
+            )
+
+            st.session_state.saved_file = (
+                file.name
+            )
+
+
+        # -------------------------
         # Dataset Overview
         # -------------------------
 
         st.markdown(
-            '<div class="section">Dataset Overview</div>',
+            '<div class="section">'
+            'Dataset Overview'
+            '</div>',
             unsafe_allow_html=True
         )
 
+
         c1, c2, c3, c4 = st.columns(4)
+
 
         c1.metric(
             "Rows",
             len(df)
         )
 
+
         c2.metric(
             "Columns",
             len(df.columns)
         )
 
+
         c3.metric(
             "Missing Values",
-            int(df.isna().sum().sum())
+            int(
+                df.isna()
+                .sum()
+                .sum()
+            )
         )
+
 
         c4.metric(
             "Duplicates",
-            int(df.duplicated().sum())
+            int(
+                df.duplicated()
+                .sum()
+            )
         )
 
 
@@ -270,9 +522,12 @@ if file:
         # -------------------------
 
         st.markdown(
-            '<div class="section">Data Preview</div>',
+            '<div class="section">'
+            'Data Preview'
+            '</div>',
             unsafe_allow_html=True
         )
+
 
         st.dataframe(
             df.head(10),
@@ -285,16 +540,28 @@ if file:
         # -------------------------
 
         st.markdown(
-            '<div class="section">Column Information</div>',
+            '<div class="section">'
+            'Column Information'
+            '</div>',
             unsafe_allow_html=True
         )
 
+
         info = pd.DataFrame({
+
             "Column": df.columns,
-            "Data Type": df.dtypes.astype(str),
-            "Missing Values": df.isna().sum().values,
-            "Unique Values": df.nunique().values
+
+            "Data Type":
+            df.dtypes.astype(str),
+
+            "Missing Values":
+            df.isna().sum().values,
+
+            "Unique Values":
+            df.nunique().values
+
         })
+
 
         st.dataframe(
             info,
@@ -308,18 +575,24 @@ if file:
         # -------------------------
 
         st.markdown(
-            '<div class="section">Summary Statistics</div>',
+            '<div class="section">'
+            'Summary Statistics'
+            '</div>',
             unsafe_allow_html=True
         )
+
 
         numbers = df.select_dtypes(
             include="number"
         )
 
+
         if not numbers.empty:
 
             st.dataframe(
-                numbers.describe().round(2),
+                numbers
+                .describe()
+                .round(2),
                 use_container_width=True
             )
 
@@ -350,6 +623,10 @@ if file:
         )
 
 
+        # -------------------------
+        # Question Processing
+        # -------------------------
+
         if question:
 
             st.chat_message(
@@ -360,19 +637,28 @@ if file:
             # Select model
             if model == "GPT-OSS 20B":
 
-                selected_model = "openai/gpt-oss-20b"
+                selected_model = (
+                    "openai/gpt-oss-20b"
+                )
 
             else:
 
-                selected_model = "openai/gpt-oss-120b"
+                selected_model = (
+                    "openai/gpt-oss-120b"
+                )
 
 
             # Dataset information
-            columns = list(df.columns)
+            columns = list(
+                df.columns
+            )
 
-            dtypes = df.dtypes.astype(
-                str
-            ).to_dict()
+
+            dtypes = (
+                df.dtypes
+                .astype(str)
+                .to_dict()
+            )
 
 
             # -------------------------
@@ -415,11 +701,11 @@ result = df["FWI"].max()
 """
 
 
-            try:
+            # -------------------------
+            # Groq
+            # -------------------------
 
-                # -------------------------
-                # Groq
-                # -------------------------
+            try:
 
                 if not groq_key:
 
@@ -435,7 +721,10 @@ result = df["FWI"].max()
                 ):
 
                     response = (
-                        groq.chat.completions.create(
+                        groq
+                        .chat
+                        .completions
+                        .create(
 
                             model=selected_model,
 
@@ -458,7 +747,7 @@ result = df["FWI"].max()
 
 
                 # -------------------------
-                # Clean code
+                # Clean Code
                 # -------------------------
 
                 code = code.strip()
@@ -484,7 +773,7 @@ result = df["FWI"].max()
 
 
                 # -------------------------
-                # Show generated code
+                # Show Code
                 # -------------------------
 
                 st.chat_message(
@@ -492,6 +781,7 @@ result = df["FWI"].max()
                 ).write(
                     "Generated Pandas code:"
                 )
+
 
                 st.code(
                     code,
@@ -503,12 +793,29 @@ result = df["FWI"].max()
                 # AST Validation
                 # -------------------------
 
-                if not check_code(code):
+                safe, reason = check_code(
+                    code
+                )
+
+
+                if not safe:
 
                     st.error(
                         "Unsafe code detected. "
                         "The code was not executed."
                     )
+
+
+                    save_unsafe_attempt(
+                        code,
+                        reason
+                    )
+
+
+                    st.info(
+                        "Unsafe attempt saved."
+                    )
+
 
                 else:
 
@@ -518,74 +825,223 @@ result = df["FWI"].max()
 
 
                     # -------------------------
-                    # Execute code
+                    # Safe Execution
                     # -------------------------
 
-                    data = {
-                        "df": df,
-                        "pd": pd
-                    }
-
-
-                    exec(
-                        code,
-                        data
-                    )
-
-
-                    result = data.get(
-                        "result"
-                    )
-
-
-                    # -------------------------
-                    # Show result
-                    # -------------------------
-
-                    st.chat_message(
-                        "assistant"
-                    ).write(
-                        "Result:"
-                    )
-
-
-                    if isinstance(
-                        result,
-                        pd.DataFrame
+                    with st.spinner(
+                        "Executing code safely..."
                     ):
 
-                        st.dataframe(
-                            result,
-                            use_container_width=True
+                        success, result = (
+                            run_safely(
+                                code,
+                                df
+                            )
                         )
 
 
-                    elif isinstance(
-                        result,
-                        pd.Series
-                    ):
+                    if not success:
 
-                        st.dataframe(
-                            result
+                        st.error(
+                            "Execution failed: "
+                            + str(result)
                         )
 
 
                     else:
 
-                        st.write(
-                            result
+                        st.chat_message(
+                            "assistant"
+                        ).write(
+                            "Result:"
+                        )
+
+
+                        # -------------------------
+                        # Display Result
+                        # -------------------------
+
+                        if isinstance(
+                            result,
+                            pd.DataFrame
+                        ):
+
+                            st.dataframe(
+                                result,
+                                use_container_width=True
+                            )
+
+                            result_text = (
+                                result.to_string()
+                            )
+
+
+                        elif isinstance(
+                            result,
+                            pd.Series
+                        ):
+
+                            st.dataframe(
+                                result
+                            )
+
+                            result_text = (
+                                result.to_string()
+                            )
+
+
+                        else:
+
+                            st.write(
+                                result
+                            )
+
+                            result_text = str(
+                                result
+                            )
+
+
+                        # -------------------------
+                        # Save Query
+                        # -------------------------
+
+                        save_query(
+
+                            st.session_state.session_id,
+
+                            question,
+
+                            model,
+
+                            code,
+
+                            result_text
+
+                        )
+
+
+                        st.success(
+                            "Query saved to history."
                         )
 
 
             except Exception as error:
 
                 st.error(
-                    "Error: " + str(error)
+                    "Something went wrong: "
+                    + str(error)
                 )
 
 
     except Exception as error:
 
         st.error(
-            "Could not read the file: " + str(error)
+            "Could not read the file: "
+            + str(error)
         )
+
+
+# ==================================================
+# RIGHT SIDE QUERY HISTORY
+# ==================================================
+
+with st.sidebar:
+
+    st.markdown(
+        "## Query History"
+    )
+
+
+    # Search
+    search = st.text_input(
+        "Search questions",
+        placeholder="Search..."
+    )
+
+
+    # Get history
+    history = get_history()
+
+
+    if len(history) == 0:
+
+        st.info(
+            "No queries saved yet."
+        )
+
+
+    else:
+
+        history_df = pd.DataFrame(
+            history,
+            columns=[
+                "Question",
+                "Model",
+                "Code",
+                "Result",
+                "Time"
+            ]
+        )
+
+
+        # -------------------------
+        # Search History
+        # -------------------------
+
+        if search:
+
+            history_df = history_df[
+                history_df["Question"]
+                .str.contains(
+                    search,
+                    case=False,
+                    na=False
+                )
+            ]
+
+
+        st.caption(
+            str(len(history_df))
+            + " queries found"
+        )
+
+
+        # -------------------------
+        # Display History
+        # -------------------------
+
+        for index, row in history_df.iterrows():
+
+            with st.expander(
+                row["Question"]
+            ):
+
+                st.write(
+                    "**Model:**",
+                    row["Model"]
+                )
+
+
+                st.write(
+                    "**Result:**"
+                )
+
+                st.write(
+                    row["Result"]
+                )
+
+
+                st.write(
+                    "**Generated Code:**"
+                )
+
+
+                st.code(
+                    row["Code"],
+                    language="python"
+                )
+
+
+                st.caption(
+                    row["Time"]
+                )
