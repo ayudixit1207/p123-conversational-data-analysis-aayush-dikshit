@@ -110,8 +110,6 @@ function setupUpload() {
 
             loadFiles();
 
-            // Clear selected files
-
             fileInput.value = "";
 
         } catch (error) {
@@ -130,6 +128,7 @@ function setupUpload() {
         }
 
     });
+
 }
 
 
@@ -230,11 +229,13 @@ function showProfile(profile) {
             profile.duplicate_rows ?? 0;
     }
 
+
     const fileCountElement =
         document.getElementById("fileCount");
 
     if (fileCountElement) {
-        fileCountElement.innerText = profile.total_files ?? 0;
+        fileCountElement.innerText =
+            profile.total_files ?? 0;
     }
 
 
@@ -327,49 +328,110 @@ function showProfile(profile) {
         document.getElementById("previewTables");
 
     if (previewContainer) {
+
         previewContainer.innerHTML = "";
 
-        const previewGroups = profile.preview_groups || [
-            {
-                name: "Dataset",
-                columns: Object.keys(profile.preview?.[0] || {}),
-                rows: profile.preview || [],
-            },
-        ];
+        const previewGroups =
+            profile.preview_groups || [
+                {
+                    name: "Dataset",
+                    columns:
+                        Object.keys(
+                            profile.preview?.[0] || {}
+                        ),
+                    rows:
+                        profile.preview || [],
+                },
+            ];
 
-        previewGroups.forEach(function (group) {
-            const section = document.createElement("section");
-            section.className = "preview-group";
+        previewGroups.forEach(
+            function (group) {
 
-            const heading = document.createElement("h3");
-            heading.innerText = group.name || "Dataset";
-            section.appendChild(heading);
+                const section =
+                    document.createElement(
+                        "section"
+                    );
 
-            const table = document.createElement("table");
-            const header = table.createTHead().insertRow();
-            const body = table.createTBody();
+                section.className =
+                    "preview-group";
 
-            (group.columns || []).forEach(function (column) {
-                const cell = document.createElement("th");
-                cell.innerText = column;
-                header.appendChild(cell);
-            });
+                const heading =
+                    document.createElement(
+                        "h3"
+                    );
 
-            (group.rows || []).forEach(function (item) {
-                const row = body.insertRow();
+                heading.innerText =
+                    group.name || "Dataset";
 
-                (group.columns || []).forEach(function (column) {
-                    const cell = row.insertCell();
-                    cell.innerText = item[column] ?? "";
-                });
-            });
+                section.appendChild(
+                    heading
+                );
 
-            section.appendChild(table);
-            previewContainer.appendChild(section);
-        });
+                const table =
+                    document.createElement(
+                        "table"
+                    );
+
+                const header =
+                    table.createTHead()
+                        .insertRow();
+
+                const body =
+                    table.createTBody();
+
+                (group.columns || [])
+                    .forEach(
+                        function (column) {
+
+                            const cell =
+                                document.createElement(
+                                    "th"
+                                );
+
+                            cell.innerText =
+                                column;
+
+                            header.appendChild(
+                                cell
+                            );
+                        }
+                    );
+
+                (group.rows || [])
+                    .forEach(
+                        function (item) {
+
+                            const row =
+                                body.insertRow();
+
+                            (group.columns || [])
+                                .forEach(
+                                    function (column) {
+
+                                        const cell =
+                                            row.insertCell();
+
+                                        cell.innerText =
+                                            item[column] ?? "";
+                                    }
+                                );
+                        }
+                    );
+
+                section.appendChild(
+                    table
+                );
+
+                previewContainer.appendChild(
+                    section
+                );
+            }
+        );
 
         if (previewGroups.length === 0) {
-            previewContainer.innerText = "No preview data available.";
+
+            previewContainer.innerText =
+                "No preview data available.";
         }
     }
 }
@@ -380,87 +442,195 @@ function showProfile(profile) {
 // =========================
 
 function setupAsk() {
-    ["questionInput", "question"].forEach(function (inputId) {
-        const input = document.getElementById(inputId);
 
-        if (input) {
-            input.addEventListener("keydown", function (event) {
-                if (event.key === "Enter") {
-                    event.preventDefault();
-                    askQuestion();
+    ["questionInput", "question"]
+        .forEach(
+            function (inputId) {
+
+                const input =
+                    document.getElementById(
+                        inputId
+                    );
+
+                if (input) {
+
+                    input.addEventListener(
+                        "keydown",
+                        function (event) {
+
+                            if (
+                                event.key === "Enter"
+                            ) {
+
+                                event.preventDefault();
+
+                                askQuestion();
+                            }
+                        }
+                    );
                 }
-            });
-        }
-    });
+            }
+        );
 }
 
 
+// =========================
+// ASK QUESTION
+// =========================
+
 async function askQuestion() {
+
     const questionInput =
-        document.getElementById("questionInput") ||
-        document.getElementById("question");
-    const answerBox = document.getElementById("answerBox");
+        document.getElementById(
+            "questionInput"
+        ) ||
+        document.getElementById(
+            "question"
+        );
+
+    const answerBox =
+        document.getElementById(
+            "answerBox"
+        );
+
     const codeBox =
-        document.getElementById("codeBox") ||
-        document.getElementById("generatedCode");
-    const question = questionInput?.value.trim();
+        document.getElementById(
+            "codeBox"
+        ) ||
+        document.getElementById(
+            "generatedCode"
+        );
+
+    const question =
+        questionInput?.value.trim();
+
 
     if (!question) {
+
         if (answerBox) {
-            answerBox.innerText = "Please enter a question.";
+
+            answerBox.innerText =
+                "Please enter a question.";
         }
+
         return;
     }
 
+
     try {
+
         if (answerBox) {
-            answerBox.innerText = "Processing...";
+
+            answerBox.innerText =
+                "Processing...";
         }
 
-        const response = await fetch("/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ question }),
-        });
-        const data = await response.json();
+
+        const response =
+            await fetch(
+                "/ask",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body:
+                        JSON.stringify({
+                            question
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
 
         if (!response.ok) {
-            throw new Error(data.error || "Question failed");
-        }
 
-        if (answerBox) {
-            renderMarkdownAnswer(
-                answerBox,
-                data.answer || "No answer received."
+            throw new Error(
+                data.error ||
+                "Question failed"
             );
         }
 
-        if (codeBox) {
-            codeBox.textContent = data.code || "";
-        }
-
-        if (data.chart) {
-            showChart(data.chart);
-        }
-    } catch (error) {
-        console.log("Ask error:", error);
 
         if (answerBox) {
-            answerBox.innerText = "Error: " + error.message;
+
+            renderMarkdownAnswer(
+                answerBox,
+                data.answer ||
+                "No answer received."
+            );
+        }
+
+
+        if (codeBox) {
+
+            codeBox.textContent =
+                data.code || "";
+        }
+
+
+        if (data.chart) {
+
+            showChart(
+                data.chart
+            );
+        }
+
+
+        // =========================
+        // EXPORT BUTTONS
+        // =========================
+
+        setupExportButtons(data);
+
+
+    } catch (error) {
+
+        console.log(
+            "Ask error:",
+            error
+        );
+
+        if (answerBox) {
+
+            answerBox.innerText =
+                "Error: " +
+                error.message;
         }
     }
 }
 
 
-function renderMarkdownAnswer(element, markdown) {
-    if (window.marked?.parse && window.DOMPurify?.sanitize) {
-        element.innerHTML = window.DOMPurify.sanitize(
-            window.marked.parse(String(markdown))
-        );
+// =========================
+// MARKDOWN ANSWER
+// =========================
+
+function renderMarkdownAnswer(
+    element,
+    markdown
+) {
+
+    if (
+        window.marked?.parse &&
+        window.DOMPurify?.sanitize
+    ) {
+
+        element.innerHTML =
+            window.DOMPurify.sanitize(
+                window.marked.parse(
+                    String(markdown)
+                )
+            );
+
         return;
     }
 
-    element.textContent = String(markdown);
+    element.textContent =
+        String(markdown);
 }
 
 
@@ -485,13 +655,24 @@ function showChart(chart) {
         return;
     }
 
-    const chartContainer = oldCanvas.parentElement;
+
+    const chartContainer =
+        oldCanvas.parentElement;
+
 
     if (chartContainer) {
-        chartContainer.style.position = "relative";
-        chartContainer.style.marginInline = "auto";
+
+        chartContainer.style.position =
+            "relative";
+
+        chartContainer.style.marginInline =
+            "auto";
+
         chartContainer.style.maxWidth =
-            chart.type === "heatmap" ? "640px" : "100%";
+            chart.type === "heatmap"
+                ? "640px"
+                : "100%";
+
         chartContainer.style.height =
             chart.type === "heatmap"
                 ? "clamp(320px, 70vw, 640px)"
@@ -559,7 +740,9 @@ function showChart(chart) {
             chart.labels || [];
 
         const values =
-            chart.matrix || chart.values || [];
+            chart.matrix ||
+            chart.values ||
+            [];
 
 
         const matrixData = [];
@@ -595,11 +778,14 @@ function showChart(chart) {
 
                 matrixData.push({
 
-                    x: labels[j],
+                    x:
+                        labels[j],
 
-                    y: labels[i],
+                    y:
+                        labels[i],
 
-                    v: value
+                    v:
+                        value
                 });
             }
         }
@@ -750,39 +936,47 @@ function showChart(chart) {
 
                         responsive: true,
 
-                        maintainAspectRatio: false,
+                        maintainAspectRatio:
+                            false,
 
 
                         scales: {
 
                             x: {
 
-                                type: "category",
+                                type:
+                                    "category",
 
                                 labels:
                                     labels,
 
-                                offset: true,
+                                offset:
+                                    true,
 
                                 grid: {
-                                    display: false
+                                    display:
+                                        false
                                 }
                             },
 
 
                             y: {
 
-                                type: "category",
+                                type:
+                                    "category",
 
                                 labels:
                                     labels,
 
-                                offset: true,
+                                offset:
+                                    true,
 
-                                reverse: true,
+                                reverse:
+                                    true,
 
                                 grid: {
-                                    display: false
+                                    display:
+                                        false
                                 }
                             }
                         },
@@ -791,7 +985,8 @@ function showChart(chart) {
                         plugins: {
 
                             legend: {
-                                display: false
+                                display:
+                                    false
                             },
 
 
@@ -881,13 +1076,15 @@ function showChart(chart) {
 
                         responsive: true,
 
-                        maintainAspectRatio: false,
+                        maintainAspectRatio:
+                            false,
 
                         plugins: {
 
                             legend: {
 
-                                position: "right"
+                                position:
+                                    "right"
                             }
                         }
                     }
@@ -939,7 +1136,8 @@ function showChart(chart) {
 
                         responsive: true,
 
-                        maintainAspectRatio: false,
+                        maintainAspectRatio:
+                            false,
 
                         scales: {
 
@@ -1004,7 +1202,8 @@ function showChart(chart) {
 
                         responsive: true,
 
-                        maintainAspectRatio: false,
+                        maintainAspectRatio:
+                            false,
 
                         scales: {
 
@@ -1056,6 +1255,7 @@ function showChart(chart) {
                 );
 
         }
+
 
         else if (
             chart.x_values &&
@@ -1113,7 +1313,8 @@ function showChart(chart) {
 
                         responsive: true,
 
-                        maintainAspectRatio: false,
+                        maintainAspectRatio:
+                            false,
 
                         scales: {
 
@@ -1175,7 +1376,8 @@ function showChart(chart) {
 
                         responsive: true,
 
-                        maintainAspectRatio: false,
+                        maintainAspectRatio:
+                            false,
 
                         scales: {
 
@@ -1274,6 +1476,7 @@ async function loadFiles() {
             }
         );
 
+
     } catch (error) {
 
         console.log(
@@ -1358,6 +1561,7 @@ async function deleteFile(
             );
         }
 
+
     } catch (error) {
 
         alert(
@@ -1365,4 +1569,377 @@ async function deleteFile(
             error.message
         );
     }
+}
+
+
+// =========================
+// EXPORT BUTTONS
+// =========================
+
+function setupExportButtons(data) {
+
+    const answerBox =
+        document.getElementById(
+            "answerBox"
+        );
+
+
+    if (!answerBox) {
+        return;
+    }
+
+
+    let exportBox =
+        document.getElementById(
+            "exportBox"
+        );
+
+
+    if (!exportBox) {
+
+        exportBox =
+            document.createElement(
+                "div"
+            );
+
+        exportBox.id =
+            "exportBox";
+
+        exportBox.style.marginTop =
+            "15px";
+
+        exportBox.style.display =
+            "flex";
+
+        exportBox.style.gap =
+            "10px";
+
+        exportBox.style.flexWrap =
+            "wrap";
+
+
+        answerBox.insertAdjacentElement(
+            "afterend",
+            exportBox
+        );
+    }
+
+
+    exportBox.innerHTML = "";
+
+
+    // =========================
+    // CSV BUTTON
+    // =========================
+
+    if (
+        data &&
+        data.result !== null &&
+        data.result !== undefined
+    ) {
+
+        const csvButton =
+            document.createElement(
+                "button"
+            );
+
+        csvButton.innerText =
+            "Download Result CSV";
+
+        csvButton.type =
+            "button";
+
+
+        csvButton.addEventListener(
+            "click",
+            function () {
+
+                downloadResultCSV(
+                    data
+                );
+
+            }
+        );
+
+
+        exportBox.appendChild(
+            csvButton
+        );
+    }
+
+
+    // =========================
+    // PNG BUTTON
+    // =========================
+
+    if (
+        data &&
+        data.chart
+    ) {
+
+        const pngButton =
+            document.createElement(
+                "button"
+            );
+
+        pngButton.innerText =
+            "Download Chart PNG";
+
+        pngButton.type =
+            "button";
+
+
+        pngButton.addEventListener(
+            "click",
+            function () {
+
+                downloadChartPNG(
+                    data.chart.title ||
+                    "data-chart"
+                );
+
+            }
+        );
+
+
+        exportBox.appendChild(
+            pngButton
+        );
+    }
+
+
+    if (
+        exportBox.children.length === 0
+    ) {
+
+        exportBox.remove();
+    }
+}
+
+
+// =========================
+// DOWNLOAD RESULT CSV
+// =========================
+
+function downloadResultCSV(data) {
+
+    const question =
+        data.question || "";
+
+
+    const result =
+        data.result ?? "";
+
+
+    const answer =
+        data.answer || "";
+
+
+    const code =
+        data.code || "";
+
+
+    const rows = [
+
+        [
+            "Question",
+            "Result",
+            "Answer",
+            "Generated Code"
+        ],
+
+        [
+            question,
+            result,
+            answer,
+            code
+        ]
+
+    ];
+
+
+    const csvContent =
+        rows
+            .map(
+                function (row) {
+
+                    return row
+                        .map(csvEscape)
+                        .join(",");
+
+                }
+            )
+            .join("\n");
+
+
+    const blob =
+        new Blob(
+            [csvContent],
+            {
+                type:
+                    "text/csv;charset=utf-8;"
+            }
+        );
+
+
+    const url =
+        URL.createObjectURL(
+            blob
+        );
+
+
+    const link =
+        document.createElement(
+            "a"
+        );
+
+
+    link.href =
+        url;
+
+
+    link.download =
+        "analysis_result.csv";
+
+
+    document.body.appendChild(
+        link
+    );
+
+
+    link.click();
+
+
+    document.body.removeChild(
+        link
+    );
+
+
+    URL.revokeObjectURL(
+        url
+    );
+}
+
+
+// =========================
+// CSV ESCAPE
+// =========================
+
+function csvEscape(value) {
+
+    const text =
+        String(
+            value ?? ""
+        );
+
+
+    return '"' +
+        text
+            .replace(
+                /"/g,
+                '""'
+            )
+            .replace(
+                /\r?\n/g,
+                " "
+            ) +
+        '"';
+}
+
+
+// =========================
+// DOWNLOAD CHART PNG
+// =========================
+
+function downloadChartPNG(title) {
+
+    if (!currentChart) {
+
+        alert(
+            "No chart is available to download."
+        );
+
+        return;
+    }
+
+
+    try {
+
+        const image =
+            currentChart.toBase64Image(
+                "image/png",
+                1
+            );
+
+
+        const link =
+            document.createElement(
+                "a"
+            );
+
+
+        link.href =
+            image;
+
+
+        link.download =
+            sanitizeFileName(
+                title
+            ) +
+            ".png";
+
+
+        document.body.appendChild(
+            link
+        );
+
+
+        link.click();
+
+
+        document.body.removeChild(
+            link
+        );
+
+
+    } catch (error) {
+
+        console.log(
+            "Chart export error:",
+            error
+        );
+
+
+        alert(
+            "Could not download the chart."
+        );
+    }
+}
+
+
+// =========================
+// SAFE FILE NAME
+// =========================
+
+function sanitizeFileName(name) {
+
+    return String(
+        name ||
+        "data-chart"
+    )
+
+        .replace(
+            /[<>:"/\\|?*]+/g,
+            "_"
+        )
+
+        .replace(
+            /\s+/g,
+            "_"
+        )
+
+        .substring(
+            0,
+            80
+        );
 }
