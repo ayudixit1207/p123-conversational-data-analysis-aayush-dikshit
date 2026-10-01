@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Ask Data</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <header>
+
+        <h1>Ask Your Data</h1>
+
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/files">Files</a>
+            <a href="/ask-page">Ask</a>
+            <a href="/history">History</a>
+        </nav>
+
+    </header>
+
+    <section class="ask-card">
+
+        <h2>Natural Language Query</h2>
+
+        <input
+            type="text"
+            id="question"
+            placeholder="Ask something about your dataset"
+        >
+
+        <button onclick="askQuestion()">
+            Ask Question
+        </button>
+
+        <div id="answerBox"></div>
+
+    </section>
+
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Conversational Data Analyst</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+
+    <!-- =========================
+         HEADER
+    ========================== -->
+
+    <header>
+
+        <div>
+
+            <h1>
+                Conversational Data Analyst
+            </h1>
+
+            <p>
+                Ask questions about your CSV data in natural language
+            </p>
+
+        </div>
+
+
+        <nav>
+
+            <a href="/">
+                Dashboard
+            </a>
+
+            <a href="/files">
+                Files
+            </a>
+
+            <a href="/ask-page">
+                Ask
+            </a>
+
+            <a href="/history">
+                History
+            </a>
+
+        </nav>
+
+    </header>
+
+
+
+    <!-- =========================
+         UPLOAD DATASET
+    ========================== -->
+
+    <div class="card">
+
+        <h2>
+            Upload Dataset
+        </h2>
+
+        <p>
+            Upload one or multiple CSV files.
+        </p>
+
+
+        <div class="upload-area">
+
+            <input
+                type="file"
+                id="fileInput"
+                multiple
+                accept=".csv"
+            >
+
+
+            <button
+                type="button"
+                onclick="uploadFiles()"
+            >
+                Upload Files
+            </button>
+
+        </div>
+
+
+        <p id="uploadMessage"></p>
+
+    </div>
+
+
+
+    <!-- =========================
+         DATASET PROFILE
+    ========================== -->
+
+    <div class="card">
+
+        <h2>
+            Dataset Profile
+        </h2>
+
+
+        <div class="stats">
+
+
+            <div class="stat">
+
+                <h2 id="rowCount">
+                    0
+                </h2>
+
+                <p>
+                    Rows
+                </p>
+
+            </div>
+
+
+            <div class="stat">
+
+                <h2 id="columnCount">
+                    0
+                </h2>
+
+                <p>
+                    Columns
+                </p>
+
+            </div>
+
+
+            <div class="stat">
+
+                <h2 id="fileCount">
+                    0
+                </h2>
+
+                <p>
+                    Files
+                </p>
+
+            </div>
+
+
+            <div class="stat">
+
+                <h2 id="missingCount">
+                    0
+                </h2>
+
+                <p>
+                    Missing Values
+                </p>
+
+            </div>
+
+
+            <div class="stat">
+
+                <h2 id="duplicateCount">
+                    0
+                </h2>
+
+                <p>
+                    Duplicate Rows
+                </p>
+
+            </div>
+
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =========================
+         COLUMN INFORMATION
+    ========================== -->
+
+    <div class="card">
+
+        <h2>
+            Column Information
+        </h2>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Column
+                        </th>
+
+                        <th>
+                            Data Type
+                        </th>
+
+                        <th>
+                            Missing
+                        </th>
+
+                        <th>
+                            Missing %
+                        </th>
+
+                        <th>
+                            Unique Values
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="columnTable">
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =========================
+         NUMERIC SUMMARY
+    ========================== -->
+
+    <div class="card">
+
+        <h2>
+            Numeric Summary
+        </h2>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Column
+                        </th>
+
+                        <th>
+                            Mean
+                        </th>
+
+                        <th>
+                            Median
+                        </th>
+
+                        <th>
+                            Std
+                        </th>
+
+                        <th>
+                            Minimum
+                        </th>
+
+                        <th>
+                            Maximum
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="numericTable">
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =========================
+         DATA PREVIEW
+    ========================== -->
+
+    <div class="card">
+
+        <h2>
+            Data Preview
+        </h2>
+
+
+        <div id="previewTables" class="preview-tables"></div>
+
+    </div>
+
+
+
+    <!-- =========================
+         ASK YOUR DATA
+    ========================== -->
+
+    <div class="card">
+
+        <h2>
+            Ask Your Data
+        </h2>
+
+
+        <div class="ask-area">
+
+            <input
+                type="text"
+                id="questionInput"
+                placeholder="Example: What is the average temperature?"
+            >
+
+
+            <button
+                type="button"
+                onclick="askQuestion()"
+            >
+                Ask
+            </button>
+
+        </div>
+
+
+        <div id="answerBox">
+
+        </div>
+
+
+        <pre id="codeBox">
+
+        </pre>
+
+    </div>
+
+
+</div>
+
+
+<!-- =========================
+     JAVASCRIPT
+========================== -->
+
+<script src="{{ url_for('static', filename='script.js') }}">
+</script>
+
+
+</body>
+
+</html>

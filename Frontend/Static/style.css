@@ -1,0 +1,286 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f7fb;
+    color: #172033;
+}
+
+.container {
+    width: 92%;
+    max-width: 1250px;
+    margin: auto;
+    padding: 25px 0 50px;
+}
+
+/* Header */
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 35px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 32px;
+    color: #14213d;
+}
+
+header p {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 16px;
+}
+
+nav {
+    display: flex;
+    gap: 25px;
+}
+
+nav a {
+    text-decoration: none;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+nav a:hover {
+    color: #1d4ed8;
+}
+
+
+/* Cards */
+
+.card {
+    background: white;
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 25px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.06);
+}
+
+.card h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #14213d;
+}
+
+.card p {
+    color: #64748b;
+}
+
+
+/* Upload */
+
+input[type="file"] {
+    margin-top: 10px;
+    margin-right: 12px;
+}
+
+button {
+    border: none;
+    background: #2563eb;
+    color: white;
+    padding: 11px 20px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+button:hover {
+    background: #1d4ed8;
+}
+
+.uploaded-files {
+    border-top: 1px solid #e2e8f0;
+}
+
+.uploaded-file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.uploaded-file-details {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.uploaded-file-details strong {
+    overflow-wrap: anywhere;
+}
+
+.uploaded-file-details span,
+.empty-files-message {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.remove-file-button {
+    flex: 0 0 auto;
+    background: #b42318;
+}
+
+.remove-file-button:hover {
+    background: #912018;
+}
+
+@media (max-width: 600px) {
+    .uploaded-file-row {
+        align-items: flex-start;
+    }
+}
+
+
+/* Stats */
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 18px;
+}
+
+.stat {
+    background: #eef4ff;
+    border-radius: 12px;
+    padding: 22px;
+    text-align: center;
+    border: 1px solid #dbe7ff;
+}
+
+.stat h2 {
+    margin: 0;
+    font-size: 28px;
+    color: #1d4ed8;
+}
+
+.stat p {
+    margin: 8px 0 0;
+    color: #64748b;
+}
+
+
+/* Tables */
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    background: white;
+}
+
+.preview-group + .preview-group {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.preview-group h3 {
+    margin: 0;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+th {
+    background: #eef4ff;
+    color: #172033;
+    font-weight: 700;
+    text-align: left;
+}
+
+th,
+td {
+    padding: 13px 15px;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+tbody tr:hover {
+    background: #f8fafc;
+}
+
+
+/* Ask section */
+
+#questionInput {
+    width: calc(100% - 100px);
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    outline: none;
+    margin-right: 8px;
+}
+
+#questionInput:focus {
+    border-color: #2563eb;
+}
+
+#answerBox {
+    margin-top: 20px;
+    padding: 18px;
+    background: #f8fafc;
+    border-radius: 8px;
+    min-height: 50px;
+    line-height: 1.6;
+}
+
+#codeBox {
+    margin-top: 15px;
+    padding: 18px;
+    background: #111827;
+    color: #e5e7eb;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+
+/* Responsive */
+
+@media (max-width: 900px) {
+
+    .stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 20px;
+    }
+
+    nav {
+        gap: 15px;
+    }
+}
+
+
+@media (max-width: 600px) {
+
+    .container {
+        width: 94%;
+    }
+
+    .stats {
+        grid-template-columns: 1fr;
+    }
+
+    #questionInput {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}

@@ -1,27 +1,13 @@
-# Virtual Environment
-.venv/
 venv/
-env/
-
-# Environment variables / Secrets
-.env
-.env.*
-!.env.example
-
-# Python cache
+.venv/
 __pycache__/
-*.py[cod]
+*.pyc
 
-# IDE
+.env
+
+Uploads/
+qdrant_storage/
+
+*.db
+
 .vscode/
-.idea/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/

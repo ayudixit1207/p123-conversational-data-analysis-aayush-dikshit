@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Query History</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <header>
+
+        <h1>Query History</h1>
+
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/files">Files</a>
+            <a href="/ask-page">Ask</a>
+            <a href="/history">History</a>
+        </nav>
+
+    </header>
+
+    <section class="card">
+
+        <div id="history">
+            Loading history...
+        </div>
+
+    </section>
+
+</div>
+
+<script>
+
+fetch("/history-data")
+    .then(response => response.json())
+    .then(data => {
+
+        const box = document.getElementById("history");
+
+        if (data.length === 0) {
+
+            box.innerHTML = "<p>No queries yet.</p>";
+
+            return;
+        }
+
+        box.innerHTML = data.map(item => `
+
+            <div class="history-item">
+
+                <h3>${item.question}</h3>
+
+                <p>${item.answer}</p>
+
+                <small>${item.created_at}</small>
+
+            </div>
+
+        `).join("");
+
+    });
+
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Dataset Files</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+    <script
+        defer
+        src="{{ url_for('static', filename='script.js') }}"
+    ></script>
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <header>
+
+        <h1>Dataset Files</h1>
+
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/files">Files</a>
+            <a href="/ask-page">Ask</a>
+            <a href="/history">History</a>
+        </nav>
+
+    </header>
+
+    <section class="card">
+        <h2>Upload CSV Files</h2>
+        <p>Select one or more CSV files. You can also upload another batch later.</p>
+        <div class="upload-area">
+            <input type="file" id="fileInput" multiple accept=".csv">
+            <button type="button" onclick="uploadFiles()">Upload Files</button>
+        </div>
+        <p id="uploadMessage" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+        <h2>Uploaded Files <span id="uploadedFileCount">0</span></h2>
+        <p id="filesMessage" role="status" aria-live="polite"></p>
+        <div id="uploadedFiles" class="uploaded-files"></div>
+    </section>
+
+</div>
+
+</body>
+
+</html>

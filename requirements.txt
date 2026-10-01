@@ -1,8 +1,9 @@
-streamlit
+Flask
+python-dotenv
 pandas
 numpy
-plotly
-google-genai
+psycopg2-binary
 groq
-python-dotenv
-requests
+qdrant-client
+sentence-transformers
+scikit-learn
