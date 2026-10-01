@@ -1,18 +1,25 @@
+from flask import Blueprint, jsonify, request, render_template
+import pandas as pd
+import numpy as np
+import os
 from pathlib import Path
 import uuid
 
-from flask import Blueprint, jsonify, request, render_template
-import pandas as pd
-
 from Backend.ingestion import save_file, read_csv
-from Backend.processing import get_profile, get_raw_missing
+from Backend.processing import get_profile
 from Backend.chunking import create_chunks, create_text
 from Backend.embedding import create_embeddings
-from Backend.qdrant import store_vectors, clear_collection
+from Backend.qdrant import (
+    store_vectors,
+    delete_collection
+)
 from Backend.rag import get_relevant_data
+
+
 from Backend.classifier import classify_question
 from Backend.ai import generate_code, explain_result
 from Backend.executor import execute_code
+
 from Backend.database import (
     save_dataset,
     create_session,
@@ -20,13 +27,16 @@ from Backend.database import (
     get_history
 )
 
+
+
+
 routes = Blueprint("routes", __name__)
+
 
 current_data = None
 current_dataset_id = None
 current_session_id = None
 
-# All uploaded files
 all_uploaded_files = []
 
 
@@ -43,22 +53,24 @@ def restore_uploaded_files():
     global current_data
     global all_uploaded_files
 
-    if all_uploaded_files:
-        return
+    known_paths = {
+        os.path.normcase(os.path.abspath(file_info["path"]))
+        for file_info in all_uploaded_files
+    }
+    restored_frames = []
 
-    upload_dir = Path("Uploads")
-    if not upload_dir.is_dir():
-        return
-
-    restored_data = []
-    for file_path in sorted(upload_dir.glob("*.csv")):
-        try:
-            data = read_csv(str(file_path))
-        except Exception as error:
-            print(f"Could not restore {file_path.name}: {error}")
+    for path in sorted(Path("Uploads").glob("*.csv")):
+        normalized_path = os.path.normcase(os.path.abspath(path))
+        if normalized_path in known_paths:
             continue
 
-        stored_name = file_path.name
+        try:
+            dataframe = read_csv(str(path))
+        except Exception as error:
+            print(f"Could not load uploaded file {path.name}: {error}")
+            continue
+
+        stored_name = path.name
         prefix, separator, original_name = stored_name.partition("_")
         if (
             separator
@@ -68,150 +80,366 @@ def restore_uploaded_files():
             stored_name = original_name
 
         all_uploaded_files.append({
-            "id": uuid.uuid4().hex,
+            "id": path.name,
             "name": stored_name,
-            "path": str(file_path),
-            "rows": len(data),
-            "columns": len(data.columns),
-            "schema": list(data.columns)
+            "path": str(path),
+            "rows": len(dataframe),
+            "columns": len(dataframe.columns),
+            "schema": list(dataframe.columns)
         })
-        restored_data.append(data)
+        restored_frames.append(dataframe)
 
-    if restored_data:
-        current_data = pd.concat(restored_data, ignore_index=True)
+    if restored_frames:
+        frames = ([current_data] if current_data is not None else []) + restored_frames
+        current_data = pd.concat(frames, ignore_index=True)
 
+
+# ==================================================
+# PAGES
+# ==================================================
 
 @routes.route("/")
 def home():
-    return render_template("index.html")
+
+    return render_template(
+        "index.html"
+    )
 
 
 @routes.route("/files")
 def files_page():
-    restore_uploaded_files()
-    return render_template("files.html")
 
-
-@routes.route("/api/files", methods=["GET"])
-def list_uploaded_files():
-    restore_uploaded_files()
-    return jsonify({
-        "files": [public_file_info(file) for file in all_uploaded_files]
-    })
-
-
-@routes.route("/api/profile", methods=["GET"])
-def current_profile():
     restore_uploaded_files()
 
-    if current_data is None:
-        return jsonify({"profile": None})
-
-    profile = get_profile(
-        current_data,
-        source_files=all_uploaded_files
+    return render_template(
+        "files.html"
     )
-    profile["total_files"] = len(all_uploaded_files)
-    profile["files"] = [
-        public_file_info(file) for file in all_uploaded_files
-    ]
-
-    return jsonify({"profile": profile})
-
-
-@routes.route("/api/files/<file_id>", methods=["DELETE"])
-def delete_uploaded_file(file_id):
-
-    global current_data
-    global current_dataset_id
-    global current_session_id
-    global all_uploaded_files
-
-    file_to_remove = next(
-        (file for file in all_uploaded_files if file["id"] == file_id),
-        None
-    )
-
-    if file_to_remove is None:
-        return jsonify({"error": "File not found"}), 404
-
-    upload_root = Path("Uploads").resolve()
-    file_path = Path(file_to_remove["path"]).resolve()
-
-    if upload_root not in file_path.parents:
-        return jsonify({"error": "Invalid upload path"}), 400
-
-    try:
-        file_path.unlink(missing_ok=True)
-        all_uploaded_files = [
-            file for file in all_uploaded_files if file["id"] != file_id
-        ]
-
-        remaining_data = [
-            read_csv(file["path"])
-            for file in all_uploaded_files
-            if Path(file["path"]).is_file()
-        ]
-
-        current_data = (
-            pd.concat(remaining_data, ignore_index=True)
-            if remaining_data
-            else None
-        )
-        current_dataset_id = None
-        current_session_id = None
-
-        clear_collection("dataset_chunks")
-
-        texts = []
-        file_names = []
-        for file, data in zip(all_uploaded_files, remaining_data):
-            for chunk in create_chunks(data):
-                texts.append(create_text(chunk))
-                file_names.append(file["name"])
-
-        if texts:
-            store_vectors(
-                "dataset_chunks",
-                create_embeddings(texts),
-                texts,
-                file_names
-            )
-
-        profile = (
-            get_profile(current_data, source_files=all_uploaded_files)
-            if current_data is not None
-            else None
-        )
-        if profile is not None:
-            profile["total_files"] = len(all_uploaded_files)
-            profile["files"] = [
-                public_file_info(file) for file in all_uploaded_files
-            ]
-
-        return jsonify({
-            "files": [public_file_info(file) for file in all_uploaded_files],
-            "total_files": len(all_uploaded_files),
-            "profile": profile
-        })
-
-    except Exception as error:
-        print("\nFILE DELETE ERROR:")
-        print(error)
-        return jsonify({"error": str(error)}), 500
 
 
 @routes.route("/ask-page")
 def ask_page():
-    return render_template("ask.html")
+
+    return render_template(
+        "ask.html"
+    )
 
 
 @routes.route("/history")
 def history_page():
-    return render_template("history.html")
+
+    return render_template(
+        "history.html"
+    )
 
 
-@routes.route("/upload", methods=["POST"])
+# ==================================================
+# CHART DATA
+# ==================================================
+
+def make_chart_data(data, question):
+
+    question = question.lower()
+
+    numeric_columns = (
+        data
+        .select_dtypes(
+            include="number"
+        )
+        .columns
+        .tolist()
+    )
+
+    categorical_columns = (
+        data
+        .select_dtypes(
+            include="object"
+        )
+        .columns
+        .tolist()
+    )
+
+    chart = {
+        "type": None,
+        "title": "",
+        "labels": [],
+        "values": [],
+        "points": [],
+        "matrix": []
+    }
+
+
+    # =================================================
+    # PIE
+    # =================================================
+
+    if "pie" in question:
+
+        if len(categorical_columns) > 0:
+
+            column = categorical_columns[0]
+
+            counts = (
+                data[column]
+                .dropna()
+                .value_counts()
+                .head(8)
+            )
+
+            chart["type"] = "pie"
+
+            chart["title"] = (
+                f"Distribution of {column}"
+            )
+
+            chart["labels"] = [
+                str(value)
+                for value in counts.index
+            ]
+
+            chart["values"] = [
+                int(value)
+                for value in counts.values
+            ]
+
+
+    # =================================================
+    # HEATMAP
+    # =================================================
+
+    elif "heatmap" in question:
+
+        heatmap_columns = [
+            column
+            for column in numeric_columns
+            if column.lower() not in [
+                "id",
+                "employee_id",
+                "student_id",
+                "user_id"
+            ]
+        ]
+
+        if len(heatmap_columns) >= 2:
+
+            correlation = (
+                data[heatmap_columns]
+                .corr()
+                .fillna(0)
+                .round(2)
+            )
+
+            chart["type"] = "heatmap"
+
+            chart["title"] = (
+                "Correlation Heatmap"
+            )
+
+            chart["labels"] = [
+                str(column)
+                for column in heatmap_columns
+            ]
+
+            chart["matrix"] = [
+                [
+                    float(value)
+                    for value in row
+                ]
+                for row in correlation.values
+            ]
+
+
+    # =================================================
+    # HISTOGRAM
+    # =================================================
+
+    elif "histogram" in question:
+
+        if len(numeric_columns) > 0:
+
+            column = numeric_columns[0]
+
+            values = (
+                pd.to_numeric(
+                    data[column],
+                    errors="coerce"
+                )
+                .dropna()
+            )
+
+            if len(values) > 0:
+
+                counts, bins = np.histogram(
+                    values,
+                    bins=10
+                )
+
+                chart["type"] = "histogram"
+
+                chart["title"] = (
+                    f"Distribution of {column}"
+                )
+
+                chart["labels"] = [
+                    round(float(value), 2)
+                    for value in bins[:-1]
+                ]
+
+                chart["values"] = [
+                    int(value)
+                    for value in counts
+                ]
+
+
+    # =================================================
+    # SCATTER
+    # =================================================
+
+    elif "scatter" in question:
+
+        if len(numeric_columns) >= 2:
+
+            x_column = numeric_columns[0]
+
+            y_column = numeric_columns[1]
+
+            clean_data = (
+                data[
+                    [x_column, y_column]
+                ]
+                .apply(
+                    pd.to_numeric,
+                    errors="coerce"
+                )
+                .dropna()
+                .head(500)
+            )
+
+            chart["type"] = "scatter"
+
+            chart["title"] = (
+                f"{x_column} vs {y_column}"
+            )
+
+            chart["points"] = [
+                {
+                    "x": float(row[x_column]),
+                    "y": float(row[y_column])
+                }
+                for _, row
+                in clean_data.iterrows()
+            ]
+
+
+    # =================================================
+    # LINE
+    # =================================================
+
+    elif "line" in question:
+
+        if len(numeric_columns) > 0:
+
+            column = numeric_columns[0]
+
+            values = (
+                pd.to_numeric(
+                    data[column],
+                    errors="coerce"
+                )
+                .dropna()
+                .head(200)
+            )
+
+            chart["type"] = "line"
+
+            chart["title"] = (
+                f"{column} Trend"
+            )
+
+            chart["labels"] = [
+                str(i + 1)
+                for i in range(len(values))
+            ]
+
+            chart["values"] = [
+                float(value)
+                for value in values
+            ]
+
+
+    # =================================================
+    # BAR
+    # =================================================
+
+    elif "bar" in question:
+
+        if len(categorical_columns) > 0:
+
+            column = categorical_columns[0]
+
+            counts = (
+                data[column]
+                .dropna()
+                .value_counts()
+                .head(10)
+            )
+
+            chart["type"] = "bar"
+
+            chart["title"] = (
+                f"{column} Distribution"
+            )
+
+            chart["labels"] = [
+                str(value)
+                for value in counts.index
+            ]
+
+            chart["values"] = [
+                int(value)
+                for value in counts.values
+            ]
+
+        elif len(numeric_columns) > 0:
+
+            column = numeric_columns[0]
+
+            values = (
+                pd.to_numeric(
+                    data[column],
+                    errors="coerce"
+                )
+                .dropna()
+                .head(10)
+            )
+
+            chart["type"] = "bar"
+
+            chart["title"] = (
+                f"{column} Values"
+            )
+
+            chart["labels"] = [
+                str(i + 1)
+                for i in range(len(values))
+            ]
+
+            chart["values"] = [
+                float(value)
+                for value in values
+            ]
+
+
+    return chart
+
+
+# ==================================================
+# UPLOAD
+# ==================================================
+
+@routes.route(
+    "/upload",
+    methods=["POST"]
+)
 def upload_file():
 
     global current_data
@@ -220,56 +448,92 @@ def upload_file():
     global all_uploaded_files
 
     try:
+
         restore_uploaded_files()
 
         if "files" in request.files:
-            files = request.files.getlist("files")
+
+            files = request.files.getlist(
+                "files"
+            )
 
         elif "file" in request.files:
-            files = [request.files["file"]]
+
+            files = [
+                request.files["file"]
+            ]
 
         else:
+
             return jsonify({
-                "error": "No file uploaded"
+                "error":
+                    "No file uploaded"
             }), 400
+
 
         new_data = []
         new_files = []
+
 
         for file in files:
 
             if not file.filename:
                 continue
 
-            if not file.filename.lower().endswith(".csv"):
+            if not file.filename.lower().endswith(
+                ".csv"
+            ):
                 continue
 
-            file_path = save_file(file)
 
-            data = read_csv(file_path)
+            file_path = save_file(
+                file
+            )
 
-            new_data.append(data)
+            data = read_csv(
+                file_path
+            )
 
-            file_info = {
-                "id": uuid.uuid4().hex,
-                "name": file.filename,
-                "path": file_path,
-                "rows": len(data),
-                "columns": len(data.columns),
-                "schema": list(data.columns)
-            }
 
-            new_files.append(file_info)
+            new_data.append(
+                data
+            )
+
+
+            new_files.append({
+
+                "id":
+                    os.path.basename(file_path),
+
+                "name":
+                    file.filename,
+
+                "path":
+                    file_path,
+
+                "rows":
+                    len(data),
+
+                "columns":
+                    len(data.columns),
+
+                "schema":
+                    list(data.columns)
+
+            })
+
 
         if not new_data:
 
             return jsonify({
-                "error": "No valid CSV files found"
+                "error":
+                    "No valid CSV files found"
             }), 400
 
-        # ------------------------------------------------
-        # ADD NEW DATA TO OLD DATA
-        # ------------------------------------------------
+
+        # ------------------------------------------
+        # COMBINE DATA
+        # ------------------------------------------
 
         if current_data is None:
 
@@ -285,159 +549,677 @@ def upload_file():
                 ignore_index=True
             )
 
-        # Add files to existing file list
-        all_uploaded_files.extend(new_files)
 
-        # ------------------------------------------------
+        all_uploaded_files.extend(
+            new_files
+        )
+
+
+        # ------------------------------------------
         # DATABASE
-        # ------------------------------------------------
+        # ------------------------------------------
 
-        first_file = new_files[0]
+        for file_info in new_files:
 
-        current_dataset_id = save_dataset(
-            first_file["name"],
-            first_file["path"],
-            first_file["rows"],
-            first_file["columns"]
-        )
+            dataset_id = save_dataset(
 
-        current_session_id = create_session(
-            current_dataset_id
-        )
+                file_info["name"],
 
-        # ------------------------------------------------
+                file_info["path"],
+
+                file_info["rows"],
+
+                file_info["columns"]
+
+            )
+
+
+            if current_dataset_id is None:
+
+                current_dataset_id = (
+                    dataset_id
+                )
+
+
+        if current_session_id is None:
+
+            current_session_id = (
+                create_session(
+                    current_dataset_id
+                )
+            )
+
+
+        # ------------------------------------------
         # PROFILE
-        # ------------------------------------------------
+        # ------------------------------------------
 
         profile = get_profile(
             current_data,
             source_files=all_uploaded_files
         )
 
-        profile["total_files"] = len(
-            all_uploaded_files
+
+        profile["total_files"] = (
+            len(all_uploaded_files)
         )
 
-        profile["files"] = [
-            public_file_info(file) for file in all_uploaded_files
-        ]
 
-        # ------------------------------------------------
-        # QDRANT / RAG
-        # ------------------------------------------------
+        profile["files"] = (
+            [public_file_info(file) for file in all_uploaded_files]
+        )
+
+
+        # ------------------------------------------
+        # CHUNKS
+        # ------------------------------------------
 
         texts = []
+
         vector_file_names = []
 
-        for index, data in enumerate(new_data):
 
-            chunks = create_chunks(data)
+        for index, data in enumerate(
+            new_data
+        ):
+
+            chunks = create_chunks(
+                data
+            )
+
 
             for chunk in chunks:
 
                 texts.append(
-                    create_text(chunk)
+                    create_text(
+                        chunk
+                    )
                 )
+
 
                 vector_file_names.append(
                     new_files[index]["name"]
                 )
 
-        if texts:
 
-            vectors = create_embeddings(texts)
+        # ------------------------------------------
+        # EMBEDDINGS + QDRANT
+        # ------------------------------------------
 
-            store_vectors(
-                "dataset_chunks",
-                vectors,
-                texts,
-                vector_file_names
+        if len(texts) > 0:
+
+            vectors = create_embeddings(
+                texts
             )
 
-        # ------------------------------------------------
-        # RESPONSE
-        # ------------------------------------------------
+
+            store_vectors(
+
+                "dataset_chunks",
+
+                vectors,
+
+                texts,
+
+                vector_file_names
+
+            )
+
 
         return jsonify({
 
-            "message": "Files uploaded successfully",
+            "message":
+                "Files uploaded successfully",
 
-            "files": [
-                public_file_info(file) for file in all_uploaded_files
-            ],
+            "files":
+                [public_file_info(file) for file in all_uploaded_files],
 
-            "total_files": len(
-                all_uploaded_files
-            ),
+            "total_files":
+                len(all_uploaded_files),
 
-            "profile": profile
+            "profile":
+                profile
 
         })
 
+
     except Exception as error:
 
-        print("\nUPLOAD ERROR:")
+        print(
+            "\nUPLOAD ERROR:"
+        )
+
         print(error)
+
 
         return jsonify({
             "error": str(error)
         }), 500
 
 
-@routes.route("/ask", methods=["POST"])
+# ==================================================
+# FILE LIST
+# ==================================================
+
+@routes.route("/files-data")
+def files_data():
+
+    restore_uploaded_files()
+
+    return jsonify({
+
+        "files":
+            [public_file_info(file) for file in all_uploaded_files]
+
+    })
+
+
+@routes.route("/profile")
+def dataset_profile():
+
+    restore_uploaded_files()
+
+    if current_data is None:
+        profile = {
+            "rows": 0,
+            "columns": 0,
+            "total_missing": 0,
+            "duplicate_rows": 0,
+            "column_details": [],
+            "numeric_summary": [],
+            "preview": [],
+        }
+    else:
+        profile = get_profile(
+            current_data,
+            source_files=all_uploaded_files,
+        )
+
+    profile["total_files"] = len(all_uploaded_files)
+    profile["files"] = [
+        public_file_info(file)
+        for file in all_uploaded_files
+    ]
+
+    return jsonify({"profile": profile})
+
+
+# ==================================================
+# DELETE FILE
+# ==================================================
+
+@routes.route(
+    "/delete-file",
+    methods=["POST"]
+)
+def delete_file():
+
+    global current_data
+    global current_dataset_id
+    global current_session_id
+    global all_uploaded_files
+
+    try:
+
+        restore_uploaded_files()
+
+        data = request.get_json(
+            silent=True
+        ) or {}
+
+
+        file_id = data.get("file_id")
+
+
+        if not file_id:
+
+            return jsonify({
+                "error":
+                    "File ID is required"
+            }), 400
+
+
+        # ------------------------------------------
+        # FIND FILE
+        # ------------------------------------------
+
+        selected_file = None
+
+
+        selected_file = next(
+            (
+                file_info
+                for file_info in all_uploaded_files
+                if file_info["id"] == file_id
+            ),
+            None
+        )
+
+
+        if selected_file is None:
+
+            return jsonify({
+                "error":
+                    "File not found"
+            }), 404
+
+
+        # ------------------------------------------
+        # DELETE PHYSICAL FILE
+        # ------------------------------------------
+
+        file_path = selected_file.get(
+            "path"
+        )
+
+
+        if (
+            file_path
+            and os.path.exists(file_path)
+        ):
+
+            os.remove(
+                file_path
+            )
+
+
+        # ------------------------------------------
+        # REMOVE FROM ACTIVE LIST
+        # ------------------------------------------
+
+        all_uploaded_files = [
+            file_info
+            for file_info
+            in all_uploaded_files
+            if file_info["id"] != file_id
+        ]
+
+
+        # ------------------------------------------
+        # REBUILD DATA
+        # ------------------------------------------
+
+        dataframes = []
+
+
+        for file_info in all_uploaded_files:
+
+            path = file_info.get(
+                "path"
+            )
+
+
+            if (
+                path
+                and os.path.exists(path)
+            ):
+
+                dataframe = read_csv(
+                    path
+                )
+
+                dataframes.append(
+                    dataframe
+                )
+
+
+        if dataframes:
+
+            current_data = pd.concat(
+                dataframes,
+                ignore_index=True
+            )
+
+        else:
+
+            current_data = None
+
+        current_dataset_id = None
+        current_session_id = None
+
+
+        # ------------------------------------------
+        # REBUILD QDRANT
+        # ------------------------------------------
+
+        try:
+
+            delete_collection(
+                "dataset_chunks"
+            )
+
+        except Exception as error:
+
+            print(
+                "Qdrant delete error:",
+                error
+            )
+
+
+        if dataframes:
+
+            texts = []
+
+            vector_file_names = []
+
+
+            for index, dataframe in enumerate(
+                dataframes
+            ):
+
+                chunks = create_chunks(
+                    dataframe
+                )
+
+
+                current_file_name = (
+                    all_uploaded_files[index]
+                    ["name"]
+                )
+
+
+                for chunk in chunks:
+
+                    texts.append(
+                        create_text(
+                            chunk
+                        )
+                    )
+
+
+                    vector_file_names.append(
+                        current_file_name
+                    )
+
+
+            if texts:
+
+                vectors = create_embeddings(
+                    texts
+                )
+
+
+                store_vectors(
+
+                    "dataset_chunks",
+
+                    vectors,
+
+                    texts,
+
+                    vector_file_names
+
+                )
+
+
+        # ------------------------------------------
+        # PROFILE
+        # ------------------------------------------
+
+        if current_data is not None:
+
+            profile = get_profile(
+                current_data,
+                source_files=all_uploaded_files,
+            )
+
+        else:
+            profile = {
+                "rows": 0,
+                "columns": 0,
+                "total_missing": 0,
+                "duplicate_rows": 0,
+                "column_details": [],
+                "numeric_summary": [],
+                "categorical_summary": [],
+                "preview": [],
+                "preview_groups": [],
+            }
+
+
+        profile["total_files"] = (
+            len(all_uploaded_files)
+        )
+
+
+        profile["files"] = (
+            [public_file_info(file) for file in all_uploaded_files]
+        )
+
+
+        return jsonify({
+
+            "message":
+                f"{selected_file['name']} deleted successfully.",
+
+            "files":
+                [public_file_info(file) for file in all_uploaded_files],
+
+            "total_files":
+                len(all_uploaded_files),
+
+            "profile":
+                profile
+
+        })
+
+
+    except Exception as error:
+
+        print(
+            "\nDELETE FILE ERROR:"
+        )
+
+        print(error)
+
+
+        return jsonify({
+            "error": str(error)
+        }), 500
+
+
+# ==================================================
+# ASK
+# ==================================================
+
+@routes.route(
+    "/ask",
+    methods=["POST"]
+)
 def ask_question():
 
     global current_data
     global current_session_id
 
     try:
+
         restore_uploaded_files()
 
         if current_data is None:
 
             return jsonify({
-                "error": "Please upload a CSV first"
+                "error":
+                    "Please upload a CSV first"
             }), 400
 
-        data = request.get_json(
+
+        request_data = request.get_json(
             silent=True
         ) or {}
 
-        question = data.get(
+
+        question = request_data.get(
             "question",
             ""
         ).strip()
 
+
         if not question:
 
             return jsonify({
-                "error": "Question is required"
+                "error":
+                    "Question is required"
             }), 400
 
-        question_lower = question.lower()
 
-        # Special profile questions
+        question_lower = (
+            question.lower()
+        )
+
+
+        # ------------------------------------------
+        # CHART DETECTION
+        # ------------------------------------------
+
+        chart_words = [
+
+            "chart",
+
+            "graph",
+
+            "plot",
+
+            "histogram",
+
+            "bar",
+
+            "line",
+
+            "pie",
+
+            "scatter",
+
+            "heatmap"
+
+        ]
+
+
+        is_chart_question = any(
+
+            word in question_lower
+
+            for word in chart_words
+
+        )
+
+
+        # ------------------------------------------
+        # QUESTION TYPE
+        # ------------------------------------------
+
         if (
-            "most missing" in question_lower
-            or "highest missing" in question_lower
-            or "maximum missing" in question_lower
+
+            "most missing"
+            in question_lower
+
+            or
+
+            "highest missing"
+            in question_lower
+
+            or
+
+            "maximum missing"
+            in question_lower
+
         ):
 
             question_type = "profile"
 
+
+        elif is_chart_question:
+
+            question_type = "chart"
+
+
         else:
 
-            question_type = classify_question(
-                question
+            question_type = (
+                classify_question(
+                    question
+                )
             )
 
+
         generated_code = ""
+
         answer = ""
+
         result_value = None
 
-        # ------------------------------------------------
+
+        # ==========================================
+        # CHART
+        # ==========================================
+
+        if question_type == "chart":
+
+            chart = make_chart_data(
+
+                current_data,
+
+                question
+
+            )
+
+
+            if chart["type"] is None:
+
+                answer = (
+                    "I could not create the "
+                    "requested chart from the "
+                    "available data."
+                )
+
+            else:
+
+                answer = (
+                    "Chart generated from "
+                    "the uploaded data."
+                )
+
+
+            if current_session_id:
+
+                save_query(
+
+                    current_session_id,
+
+                    question,
+
+                    answer,
+
+                    ""
+
+                )
+
+
+            return jsonify({
+
+                "question":
+                    question,
+
+                "type":
+                    "chart",
+
+                "answer":
+                    answer,
+
+                "result":
+                    None,
+
+                "code":
+                    "",
+
+                "chart":
+                    chart
+
+            })
+
+
+        # ==========================================
         # PROFILE QUESTIONS
-        # ------------------------------------------------
+        # ==========================================
 
         if question_type == "profile":
 
@@ -446,11 +1228,22 @@ def ask_question():
                 source_files=all_uploaded_files
             )
 
-            # Most missing values
+
             if (
-                "most missing" in question_lower
-                or "highest missing" in question_lower
-                or "maximum missing" in question_lower
+
+                "most missing"
+                in question_lower
+
+                or
+
+                "highest missing"
+                in question_lower
+
+                or
+
+                "maximum missing"
+                in question_lower
+
             ):
 
                 most_missing = max(
@@ -460,65 +1253,98 @@ def ask_question():
                 column = most_missing["name"]
                 count = most_missing["missing"]
 
+
                 answer = (
-                    f"The column with the most "
-                    f"missing values is '{column}' "
-                    f"with {count} missing values."
+
+                    f"The column with the "
+
+                    f"most missing values "
+
+                    f"is '{column}' with "
+
+                    f"{count} missing values."
+
                 )
 
-            # Total missing
+
             elif "missing" in question_lower:
 
                 answer = (
+
                     f"The dataset has "
+
                     f"{profile['total_missing']} "
+
                     f"missing values."
+
                 )
 
-            # Rows
+
             elif "row" in question_lower:
 
                 answer = (
+
                     f"The dataset has "
+
                     f"{profile['rows']} rows."
+
                 )
 
-            # Columns
+
             elif "column" in question_lower:
 
                 answer = (
+
                     f"The dataset has "
+
                     f"{profile['columns']} columns."
+
                 )
+
 
             else:
 
                 answer = (
-                    "Dataset profile generated successfully."
+                    "Dataset profile generated "
+                    "successfully."
                 )
 
-        # ------------------------------------------------
+
+        # ==========================================
         # AI QUESTIONS
-        # ------------------------------------------------
+        # ==========================================
 
         else:
 
             generated_code = generate_code(
+
                 question,
-                list(current_data.columns),
-                current_data.head(5).to_string(
+
+                list(
+                    current_data.columns
+                ),
+
+                current_data.head(
+                    5
+                ).to_string(
                     index=False
                 )
+
             )
+
 
             output = execute_code(
+
                 generated_code,
+
                 current_data
+
             )
 
-            # ------------------------------------------------
+
+            # --------------------------------------
             # REPAIR
-            # ------------------------------------------------
+            # --------------------------------------
 
             if not output["success"]:
 
@@ -544,121 +1370,200 @@ Rules:
 5. Do not use exec or eval.
 """
 
+
                 from Backend.ai import (
                     client,
                     clean_code
                 )
 
-                response = client.chat.completions.create(
 
-                    model="openai/gpt-oss-20b",
+                response = (
 
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": repair_prompt
-                        }
-                    ],
+                    client
+                    .chat
+                    .completions
+                    .create(
 
-                    temperature=0
+                        model=
+                            "openai/gpt-oss-20b",
+
+                        messages=[
+
+                            {
+
+                                "role":
+                                    "user",
+
+                                "content":
+                                    repair_prompt
+
+                            }
+
+                        ],
+
+                        temperature=0
+
+                    )
+
                 )
+
 
                 generated_code = clean_code(
-                    response.choices[0].message.content
+
+                    response
+                    .choices[0]
+                    .message
+                    .content
+
                 )
+
 
                 output = execute_code(
+
                     generated_code,
+
                     current_data
+
                 )
 
-            # ------------------------------------------------
+
+            # --------------------------------------
             # VERIFIED RESULT
-            # ------------------------------------------------
+            # --------------------------------------
 
             if output["success"]:
 
-                result_value = output["result"]
-
-                answer = explain_result(
-                    question,
-                    str(result_value)
+                result_value = (
+                    output["result"]
                 )
 
-            # ------------------------------------------------
+
+                answer = explain_result(
+
+                    question,
+
+                    str(result_value)
+
+                )
+
+
+            # --------------------------------------
             # RAG FALLBACK
-            # ------------------------------------------------
+            # --------------------------------------
 
             else:
 
                 try:
 
-                    context = get_relevant_data(
-                        "dataset_chunks",
-                        question
+                    context = (
+
+                        get_relevant_data(
+
+                            "dataset_chunks",
+
+                            question
+
+                        )
+
                     )
 
                 except Exception:
 
                     context = []
 
+
                 if context:
 
                     answer = (
-                        "Relevant dataset information:\n\n"
-                        + "\n\n".join(
+
+                        "Relevant dataset "
+                        "information:\n\n"
+
+                        +
+
+                        "\n\n".join(
                             context[:3]
                         )
+
                     )
 
                 else:
 
                     answer = (
-                        "I could not calculate a "
-                        "verified answer. Please try "
-                        "rephrasing your question."
+
+                        "I could not calculate "
+                        "a verified answer. "
+                        "Please try rephrasing "
+                        "your question."
+
                     )
 
-        # ------------------------------------------------
+
+        # ==========================================
         # SAVE HISTORY
-        # ------------------------------------------------
+        # ==========================================
 
         if current_session_id:
 
             save_query(
+
                 current_session_id,
+
                 question,
+
                 answer,
+
                 generated_code
+
             )
+
 
         return jsonify({
 
-            "question": question,
+            "question":
+                question,
 
-            "type": question_type,
+            "type":
+                question_type,
 
-            "answer": answer,
+            "answer":
+                answer,
 
-            "result": (
-                str(result_value)
-                if result_value is not None
-                else None
-            ),
+            "result":
 
-            "code": generated_code
+                (
+
+                    str(result_value)
+
+                    if result_value is not None
+
+                    else None
+
+                ),
+
+            "code":
+                generated_code
 
         })
 
+
     except Exception as error:
 
-        print("\nASK ERROR:")
+        print(
+            "\nASK ERROR:"
+        )
+
         print(error)
+
 
         return jsonify({
             "error": str(error)
         }), 500
 
+
+# ==================================================
+# HISTORY
+# ==================================================
 
 @routes.route("/history-data")
 def history_data():
@@ -669,19 +1574,27 @@ def history_data():
 
         history = []
 
+
         for row in rows:
 
             history.append({
 
-                "question": row[0],
+                "question":
+                    row[0],
 
-                "answer": row[1],
+                "answer":
+                    row[1],
 
-                "created_at": str(row[2])
+                "created_at":
+                    str(row[2])
 
             })
 
-        return jsonify(history)
+
+        return jsonify(
+            history
+        )
+
 
     except Exception as error:
 

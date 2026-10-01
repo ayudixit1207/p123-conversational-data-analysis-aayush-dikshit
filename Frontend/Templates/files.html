@@ -1,56 +1,341 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
 
-    <title>Dataset Files</title>
+<meta charset="UTF-8">
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='style.css') }}"
-    >
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <script
-        defer
-        src="{{ url_for('static', filename='script.js') }}"
-    ></script>
+<title>
+    Uploaded Files
+</title>
+
+
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}"
+>
 
 </head>
+
 
 <body>
 
 <div class="container">
 
-    <header>
 
-        <h1>Dataset Files</h1>
+<header>
 
-        <nav>
-            <a href="/">Dashboard</a>
-            <a href="/files">Files</a>
-            <a href="/ask-page">Ask</a>
-            <a href="/history">History</a>
-        </nav>
+<div>
 
-    </header>
+<h1>
+    Uploaded Files
+</h1>
 
-    <section class="card">
-        <h2>Upload CSV Files</h2>
-        <p>Select one or more CSV files. You can also upload another batch later.</p>
-        <div class="upload-area">
-            <input type="file" id="fileInput" multiple accept=".csv">
-            <button type="button" onclick="uploadFiles()">Upload Files</button>
-        </div>
-        <p id="uploadMessage" role="status" aria-live="polite"></p>
-    </section>
-
-    <section class="card">
-        <h2>Uploaded Files <span id="uploadedFileCount">0</span></h2>
-        <p id="filesMessage" role="status" aria-live="polite"></p>
-        <div id="uploadedFiles" class="uploaded-files"></div>
-    </section>
+<p>
+    Manage your uploaded datasets
+</p>
 
 </div>
+
+
+<nav>
+
+<a href="/">
+    Dashboard
+</a>
+
+<a href="/files">
+    Files
+</a>
+
+<a href="/ask-page">
+    Ask
+</a>
+
+<a href="/history">
+    History
+</a>
+
+</nav>
+
+</header>
+
+
+<div class="card">
+
+<h2>
+    Uploaded Datasets
+</h2>
+
+
+<p id="filesMessage"></p>
+
+
+<div class="table-container">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+    File Name
+</th>
+
+<th>
+    Rows
+</th>
+
+<th>
+    Columns
+</th>
+
+<th>
+    Action
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody id="filesTable">
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+
+</div>
+
+
+<script>
+
+
+// =================================================
+// LOAD FILES
+// =================================================
+
+async function loadFiles() {
+
+    const table =
+        document.getElementById(
+            "filesTable"
+        );
+
+
+    const message =
+        document.getElementById(
+            "filesMessage"
+        );
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/files-data"
+            );
+
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Could not load files.");
+        }
+
+
+        table.innerHTML = "";
+
+
+        if (
+            !data.files ||
+            data.files.length === 0
+        ) {
+
+            table.innerHTML = `
+
+                <tr>
+
+                    <td colspan="4">
+
+                        No files uploaded.
+
+                    </td>
+
+                </tr>
+
+            `;
+
+            return;
+        }
+
+
+        data.files.forEach(
+            function(file) {
+
+                const row =
+                    document.createElement(
+                        "tr"
+                    );
+
+
+                const nameCell = document.createElement("td");
+                nameCell.innerText = file.name;
+
+                const rowsCell = document.createElement("td");
+                rowsCell.innerText = file.rows;
+
+                const columnsCell = document.createElement("td");
+                columnsCell.innerText = file.columns;
+
+                const actionCell = document.createElement("td");
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.innerText = "Delete";
+                deleteButton.addEventListener("click", function() {
+                    deleteFile(file.id, file.name);
+                });
+
+                actionCell.appendChild(deleteButton);
+                row.append(nameCell, rowsCell, columnsCell, actionCell);
+
+
+                table.appendChild(
+                    row
+                );
+
+            }
+        );
+
+
+    } catch (error) {
+
+        message.innerText =
+            "Error loading files: " +
+            error.message;
+
+    }
+
+}
+
+
+// =================================================
+// DELETE FILE
+// =================================================
+
+async function deleteFile(
+    fileId,
+    fileName
+) {
+
+    const confirmDelete =
+        confirm(
+
+            "Are you sure you want to delete " +
+            fileName +
+            "?"
+
+        );
+
+
+    if (!confirmDelete) {
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+
+                "/delete-file",
+
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            file_id:
+                                fileId
+
+                        })
+
+                }
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            alert(
+
+                data.error ||
+                "Could not delete file."
+
+            );
+
+            return;
+        }
+
+
+        document.getElementById(
+            "filesMessage"
+        ).innerText =
+            data.message;
+
+
+        await loadFiles();
+
+
+    } catch (error) {
+
+        alert(
+
+            "Delete error: " +
+            error.message
+
+        );
+
+    }
+
+}
+
+
+// =================================================
+// START
+// =================================================
+
+loadFiles();
+
+</script>
 
 </body>
 

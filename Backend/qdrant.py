@@ -2,7 +2,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 import uuid
 
-client = QdrantClient(path="qdrant_storage")
+
+# Qdrant memory me chalega
+# Isse local qdrant_storage lock problem nahi hogi
+client = QdrantClient(":memory:")
 
 VECTOR_SIZE = 384
 
@@ -25,24 +28,6 @@ def create_collection(collection_name):
                 distance=Distance.COSINE
             )
         )
-
-
-def clear_collection(collection_name):
-
-    collections = client.get_collections()
-
-    names = [
-        collection.name
-        for collection in collections.collections
-    ]
-
-    if collection_name in names:
-
-        client.delete_collection(
-            collection_name=collection_name
-        )
-
-    create_collection(collection_name)
 
 
 def store_vectors(
@@ -89,3 +74,19 @@ def search_vectors(
     )
 
     return result.points
+
+
+def delete_collection(collection_name):
+
+    collections = client.get_collections()
+
+    names = [
+        collection.name
+        for collection in collections.collections
+    ]
+
+    if collection_name in names:
+
+        client.delete_collection(
+            collection_name=collection_name
+        )

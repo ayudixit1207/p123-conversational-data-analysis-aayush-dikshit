@@ -3,15 +3,27 @@
 
 <head>
 
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <title>Conversational Data Analyst</title>
+<title>
+    Conversational Data Analyst
+</title>
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}"
+>
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
 
 </head>
 
@@ -21,360 +33,341 @@
 <div class="container">
 
 
-    <!-- =========================
-         HEADER
-    ========================== -->
+<header>
 
-    <header>
+<div>
 
-        <div>
+<h1>
+    Conversational Data Analyst
+</h1>
 
-            <h1>
-                Conversational Data Analyst
-            </h1>
+<p>
+    Ask questions about your CSV data in natural language
+</p>
 
-            <p>
-                Ask questions about your CSV data in natural language
-            </p>
+</div>
 
-        </div>
 
+<nav>
 
-        <nav>
+<a href="/">
+    Dashboard
+</a>
 
-            <a href="/">
-                Dashboard
-            </a>
+<a href="/files">
+    Files
+</a>
 
-            <a href="/files">
-                Files
-            </a>
+<a href="/ask-page">
+    Ask
+</a>
 
-            <a href="/ask-page">
-                Ask
-            </a>
+<a href="/history">
+    History
+</a>
 
-            <a href="/history">
-                History
-            </a>
+</nav>
 
-        </nav>
+</header>
 
-    </header>
 
+<!-- UPLOAD -->
 
+<div class="card">
 
-    <!-- =========================
-         UPLOAD DATASET
-    ========================== -->
+<h2>
+    Upload Dataset
+</h2>
 
-    <div class="card">
+<p>
+    Upload one or multiple CSV files.
+</p>
 
-        <h2>
-            Upload Dataset
-        </h2>
 
-        <p>
-            Upload one or multiple CSV files.
-        </p>
+<form id="uploadForm" class="upload-area">
 
+<input
+    type="file"
+    id="fileInput"
+    multiple
+    accept=".csv"
+>
 
-        <div class="upload-area">
 
-            <input
-                type="file"
-                id="fileInput"
-                multiple
-                accept=".csv"
-            >
+<button type="submit">
+    Upload Files
+</button>
 
+</form>
 
-            <button
-                type="button"
-                onclick="uploadFiles()"
-            >
-                Upload Files
-            </button>
 
-        </div>
+<p id="uploadMessage"></p>
 
+</div>
 
-        <p id="uploadMessage"></p>
 
-    </div>
+<!-- PROFILE -->
 
+<div class="card">
 
+<h2>
+    Dataset Profile
+</h2>
 
-    <!-- =========================
-         DATASET PROFILE
-    ========================== -->
 
-    <div class="card">
+<div class="stats">
 
-        <h2>
-            Dataset Profile
-        </h2>
+<div class="stat">
 
+<h2 id="rowCount">
+    0
+</h2>
 
-        <div class="stats">
+<p>
+    Rows
+</p>
 
+</div>
 
-            <div class="stat">
 
-                <h2 id="rowCount">
-                    0
-                </h2>
+<div class="stat">
 
-                <p>
-                    Rows
-                </p>
+<h2 id="columnCount">
+    0
+</h2>
 
-            </div>
+<p>
+    Columns
+</p>
 
+</div>
 
-            <div class="stat">
 
-                <h2 id="columnCount">
-                    0
-                </h2>
+<div class="stat">
 
-                <p>
-                    Columns
-                </p>
+<h2 id="fileCount">
+    0
+</h2>
 
-            </div>
+<p>
+    Files
+</p>
 
+</div>
 
-            <div class="stat">
 
-                <h2 id="fileCount">
-                    0
-                </h2>
+<div class="stat">
 
-                <p>
-                    Files
-                </p>
+<h2 id="missingCount">
+    0
+</h2>
 
-            </div>
+<p>
+    Missing Values
+</p>
 
+</div>
 
-            <div class="stat">
 
-                <h2 id="missingCount">
-                    0
-                </h2>
+<div class="stat">
 
-                <p>
-                    Missing Values
-                </p>
+<h2 id="duplicateCount">
+    0
+</h2>
 
-            </div>
+<p>
+    Duplicate Rows
+</p>
 
+</div>
 
-            <div class="stat">
+</div>
 
-                <h2 id="duplicateCount">
-                    0
-                </h2>
+</div>
 
-                <p>
-                    Duplicate Rows
-                </p>
 
-            </div>
+<!-- COLUMN INFORMATION -->
 
+<div class="card">
 
-        </div>
+<h2>
+    Column Information
+</h2>
 
-    </div>
 
+<div class="table-container">
 
+<table>
 
-    <!-- =========================
-         COLUMN INFORMATION
-    ========================== -->
+<thead>
 
-    <div class="card">
+<tr>
 
-        <h2>
-            Column Information
-        </h2>
+<th>
+    Column
+</th>
 
+<th>
+    Data Type
+</th>
 
-        <div class="table-container">
+<th>
+    Missing
+</th>
 
-            <table>
+<th>
+    Missing %
+</th>
 
-                <thead>
+<th>
+    Unique Values
+</th>
 
-                    <tr>
+</tr>
 
-                        <th>
-                            Column
-                        </th>
+</thead>
 
-                        <th>
-                            Data Type
-                        </th>
 
-                        <th>
-                            Missing
-                        </th>
+<tbody id="columnTable">
+</tbody>
 
-                        <th>
-                            Missing %
-                        </th>
+</table>
 
-                        <th>
-                            Unique Values
-                        </th>
+</div>
 
-                    </tr>
+</div>
 
-                </thead>
 
+<!-- NUMERIC SUMMARY -->
 
-                <tbody id="columnTable">
+<div class="card">
 
-                </tbody>
+<h2>
+    Numeric Summary
+</h2>
 
-            </table>
 
-        </div>
+<div class="table-container">
 
-    </div>
+<table>
 
+<thead>
 
+<tr>
 
-    <!-- =========================
-         NUMERIC SUMMARY
-    ========================== -->
+<th>
+    Column
+</th>
 
-    <div class="card">
+<th>
+    Mean
+</th>
 
-        <h2>
-            Numeric Summary
-        </h2>
+<th>
+    Median
+</th>
 
+<th>
+    Std
+</th>
 
-        <div class="table-container">
+<th>
+    Minimum
+</th>
 
-            <table>
+<th>
+    Maximum
+</th>
 
-                <thead>
+</tr>
 
-                    <tr>
+</thead>
 
-                        <th>
-                            Column
-                        </th>
 
-                        <th>
-                            Mean
-                        </th>
+<tbody id="numericTable">
+</tbody>
 
-                        <th>
-                            Median
-                        </th>
+</table>
 
-                        <th>
-                            Std
-                        </th>
+</div>
 
-                        <th>
-                            Minimum
-                        </th>
+</div>
 
-                        <th>
-                            Maximum
-                        </th>
 
-                    </tr>
+<!-- PREVIEW -->
 
-                </thead>
+<div class="card">
 
+<h2>
+    Data Preview
+</h2>
 
-                <tbody id="numericTable">
 
-                </tbody>
+<div id="previewTables" class="preview-tables"></div>
 
-            </table>
+</div>
 
-        </div>
 
-    </div>
+<!-- ASK -->
 
+<div class="card">
 
+<h2>
+    Ask Your Data
+</h2>
 
-    <!-- =========================
-         DATA PREVIEW
-    ========================== -->
 
-    <div class="card">
+<div class="ask-area">
 
-        <h2>
-            Data Preview
-        </h2>
+<input
+    type="text"
+    id="questionInput"
+    placeholder="Example: What is the average salary?"
+>
 
 
-        <div id="previewTables" class="preview-tables"></div>
+<button onclick="askQuestion()">
+    Ask
+</button>
 
-    </div>
+</div>
 
 
+<div id="answerBox"></div>
 
-    <!-- =========================
-         ASK YOUR DATA
-    ========================== -->
+<pre id="codeBox"></pre>
 
-    <div class="card">
+</div>
 
-        <h2>
-            Ask Your Data
-        </h2>
 
+<!-- CHART -->
 
-        <div class="ask-area">
+<div class="card">
 
-            <input
-                type="text"
-                id="questionInput"
-                placeholder="Example: What is the average temperature?"
-            >
+<h2>
+    Data Visualization
+</h2>
 
 
-            <button
-                type="button"
-                onclick="askQuestion()"
-            >
-                Ask
-            </button>
+<div style="
+    position: relative;
+    width: 100%;
+    height: 420px;
+">
 
-        </div>
+<canvas id="dataChart"></canvas>
 
+</div>
 
-        <div id="answerBox">
-
-        </div>
-
-
-        <pre id="codeBox">
-
-        </pre>
-
-    </div>
+</div>
 
 
 </div>
 
 
-<!-- =========================
-     JAVASCRIPT
-========================== -->
-
-<script src="{{ url_for('static', filename='script.js') }}">
-</script>
-
+<script
+    src="{{ url_for('static', filename='script.js') }}"
+></script>
 
 </body>
 
