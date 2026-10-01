@@ -21,8 +21,10 @@
 >
 
 
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+<!-- Chart Matrix -->
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
 
 </head>
@@ -71,7 +73,9 @@
 </header>
 
 
-<!-- UPLOAD -->
+<!-- =========================
+     UPLOAD
+========================= -->
 
 <div class="card">
 
@@ -84,7 +88,10 @@
 </p>
 
 
-<form id="uploadForm" class="upload-area">
+<form
+    id="uploadForm"
+    class="upload-area"
+>
 
 <input
     type="file"
@@ -106,7 +113,9 @@
 </div>
 
 
-<!-- PROFILE -->
+<!-- =========================
+     PROFILE
+========================= -->
 
 <div class="card">
 
@@ -116,6 +125,7 @@
 
 
 <div class="stats">
+
 
 <div class="stat">
 
@@ -181,12 +191,15 @@
 
 </div>
 
-</div>
 
 </div>
 
+</div>
 
-<!-- COLUMN INFORMATION -->
+
+<!-- =========================
+     COLUMN INFORMATION
+========================= -->
 
 <div class="card">
 
@@ -238,7 +251,9 @@
 </div>
 
 
-<!-- NUMERIC SUMMARY -->
+<!-- =========================
+     NUMERIC SUMMARY
+========================= -->
 
 <div class="card">
 
@@ -294,7 +309,9 @@
 </div>
 
 
-<!-- PREVIEW -->
+<!-- =========================
+     DATA PREVIEW
+========================= -->
 
 <div class="card">
 
@@ -303,12 +320,17 @@
 </h2>
 
 
-<div id="previewTables" class="preview-tables"></div>
+<div
+    id="previewTables"
+    class="preview-tables"
+></div>
 
 </div>
 
 
-<!-- ASK -->
+<!-- =========================
+     ASK QUESTION
+========================= -->
 
 <div class="card">
 
@@ -340,7 +362,9 @@
 </div>
 
 
-<!-- CHART -->
+<!-- =========================
+     CHART
+========================= -->
 
 <div class="card">
 
@@ -365,11 +389,20 @@
 </div>
 
 
+<!-- Markdown -->
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script>
+
+<!-- HTML Sanitizer -->
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+
+<!-- PDF Generator -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- Project JavaScript -->
 <script
     src="{{ url_for('static', filename='script.js') }}"
 ></script>
+
 
 </body>
 

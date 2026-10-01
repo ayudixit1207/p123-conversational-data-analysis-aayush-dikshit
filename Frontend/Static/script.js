@@ -32,103 +32,108 @@ function setupUpload() {
         return;
     }
 
-    uploadForm.addEventListener("submit", async function (event) {
+    uploadForm.addEventListener(
+        "submit",
+        async function (event) {
 
-        event.preventDefault();
+            event.preventDefault();
 
-        const fileInput =
-            document.getElementById("fileInput");
+            const fileInput =
+                document.getElementById("fileInput");
 
-        const message =
-            document.getElementById("uploadMessage");
+            const message =
+                document.getElementById("uploadMessage");
 
-        if (!fileInput) {
-            console.log("File input not found");
-            return;
-        }
-
-        if (fileInput.files.length === 0) {
-
-            if (message) {
-                message.innerText =
-                    "Please select CSV file(s).";
+            if (!fileInput) {
+                console.log("File input not found");
+                return;
             }
 
-            return;
-        }
+            if (fileInput.files.length === 0) {
 
-        const formData = new FormData();
-
-        for (
-            let i = 0;
-            i < fileInput.files.length;
-            i++
-        ) {
-
-            formData.append(
-                "files",
-                fileInput.files[i]
-            );
-        }
-
-        try {
-
-            if (message) {
-                message.innerText =
-                    "Uploading...";
-            }
-
-            const response = await fetch(
-                "/upload",
-                {
-                    method: "POST",
-                    body: formData
+                if (message) {
+                    message.innerText =
+                        "Please select CSV file(s).";
                 }
-            );
 
-            const data =
-                await response.json();
+                return;
+            }
 
-            if (!response.ok) {
+            const formData =
+                new FormData();
 
-                throw new Error(
-                    data.error ||
-                    "Upload failed"
+            for (
+                let i = 0;
+                i < fileInput.files.length;
+                i++
+            ) {
+
+                formData.append(
+                    "files",
+                    fileInput.files[i]
                 );
             }
 
-            if (message) {
+            try {
 
-                message.innerText =
-                    data.message ||
-                    "File uploaded successfully.";
-            }
+                if (message) {
+                    message.innerText =
+                        "Uploading...";
+                }
 
-            if (data.profile) {
-                showProfile(data.profile);
-            }
+                const response =
+                    await fetch(
+                        "/upload",
+                        {
+                            method: "POST",
+                            body: formData
+                        }
+                    );
 
-            loadFiles();
+                const data =
+                    await response.json();
 
-            fileInput.value = "";
+                if (!response.ok) {
 
-        } catch (error) {
+                    throw new Error(
+                        data.error ||
+                        "Upload failed"
+                    );
+                }
 
-            console.log(
-                "Upload error:",
-                error
-            );
+                if (message) {
 
-            if (message) {
+                    message.innerText =
+                        data.message ||
+                        "File uploaded successfully.";
+                }
 
-                message.innerText =
-                    "Error: " +
-                    error.message;
+                if (data.profile) {
+                    showProfile(
+                        data.profile
+                    );
+                }
+
+                loadFiles();
+
+                fileInput.value = "";
+
+            } catch (error) {
+
+                console.log(
+                    "Upload error:",
+                    error
+                );
+
+                if (message) {
+
+                    message.innerText =
+                        "Error: " +
+                        error.message;
+                }
             }
         }
-
-    });
-
+    );
 }
 
 
@@ -174,7 +179,7 @@ function showProfile(profile) {
     }
 
 
-    // Total rows
+    // Rows
 
     const rowsElement =
         document.getElementById(
@@ -188,7 +193,7 @@ function showProfile(profile) {
     }
 
 
-    // Total columns
+    // Columns
 
     const columnsElement =
         document.getElementById(
@@ -230,10 +235,15 @@ function showProfile(profile) {
     }
 
 
+    // Files
+
     const fileCountElement =
-        document.getElementById("fileCount");
+        document.getElementById(
+            "fileCount"
+        );
 
     if (fileCountElement) {
+
         fileCountElement.innerText =
             profile.total_files ?? 0;
     }
@@ -325,7 +335,9 @@ function showProfile(profile) {
     // =========================
 
     const previewContainer =
-        document.getElementById("previewTables");
+        document.getElementById(
+            "previewTables"
+        );
 
     if (previewContainer) {
 
@@ -333,16 +345,21 @@ function showProfile(profile) {
 
         const previewGroups =
             profile.preview_groups || [
+
                 {
                     name: "Dataset",
+
                     columns:
                         Object.keys(
                             profile.preview?.[0] || {}
                         ),
+
                     rows:
-                        profile.preview || [],
-                },
+                        profile.preview || []
+                }
+
             ];
+
 
         previewGroups.forEach(
             function (group) {
@@ -355,29 +372,36 @@ function showProfile(profile) {
                 section.className =
                     "preview-group";
 
+
                 const heading =
                     document.createElement(
                         "h3"
                     );
 
                 heading.innerText =
-                    group.name || "Dataset";
+                    group.name ||
+                    "Dataset";
+
 
                 section.appendChild(
                     heading
                 );
+
 
                 const table =
                     document.createElement(
                         "table"
                     );
 
+
                 const header =
                     table.createTHead()
                         .insertRow();
 
+
                 const body =
                     table.createTBody();
+
 
                 (group.columns || [])
                     .forEach(
@@ -397,12 +421,14 @@ function showProfile(profile) {
                         }
                     );
 
+
                 (group.rows || [])
                     .forEach(
                         function (item) {
 
                             const row =
                                 body.insertRow();
+
 
                             (group.columns || [])
                                 .forEach(
@@ -418,15 +444,18 @@ function showProfile(profile) {
                         }
                     );
 
+
                 section.appendChild(
                     table
                 );
+
 
                 previewContainer.appendChild(
                     section
                 );
             }
         );
+
 
         if (previewGroups.length === 0) {
 
@@ -443,34 +472,36 @@ function showProfile(profile) {
 
 function setupAsk() {
 
-    ["questionInput", "question"]
-        .forEach(
-            function (inputId) {
+    [
+        "questionInput",
+        "question"
+    ].forEach(
+        function (inputId) {
 
-                const input =
-                    document.getElementById(
-                        inputId
-                    );
+            const input =
+                document.getElementById(
+                    inputId
+                );
 
-                if (input) {
+            if (input) {
 
-                    input.addEventListener(
-                        "keydown",
-                        function (event) {
+                input.addEventListener(
+                    "keydown",
+                    function (event) {
 
-                            if (
-                                event.key === "Enter"
-                            ) {
+                        if (
+                            event.key === "Enter"
+                        ) {
 
-                                event.preventDefault();
+                            event.preventDefault();
 
-                                askQuestion();
-                            }
+                            askQuestion();
                         }
-                    );
-                }
+                    }
+                );
             }
-        );
+        }
+    );
 }
 
 
@@ -488,10 +519,12 @@ async function askQuestion() {
             "question"
         );
 
+
     const answerBox =
         document.getElementById(
             "answerBox"
         );
+
 
     const codeBox =
         document.getElementById(
@@ -500,6 +533,7 @@ async function askQuestion() {
         document.getElementById(
             "generatedCode"
         );
+
 
     const question =
         questionInput?.value.trim();
@@ -531,10 +565,12 @@ async function askQuestion() {
                 "/ask",
                 {
                     method: "POST",
+
                     headers: {
                         "Content-Type":
                             "application/json"
                     },
+
                     body:
                         JSON.stringify({
                             question
@@ -581,11 +617,12 @@ async function askQuestion() {
         }
 
 
-        // =========================
-        // EXPORT BUTTONS
-        // =========================
+        // IMPORTANT:
+        // Creates CSV/PDF/PNG buttons
 
-        setupExportButtons(data);
+        setupExportButtons(
+            data
+        );
 
 
     } catch (error) {
@@ -594,6 +631,7 @@ async function askQuestion() {
             "Ask error:",
             error
         );
+
 
         if (answerBox) {
 
@@ -628,6 +666,7 @@ function renderMarkdownAnswer(
 
         return;
     }
+
 
     element.textContent =
         String(markdown);
@@ -680,7 +719,7 @@ function showChart(chart) {
     }
 
 
-    // Destroy existing chart
+    // Destroy old chart
 
     const existingChart =
         Chart.getChart(
@@ -719,6 +758,7 @@ function showChart(chart) {
             "canvas"
         );
 
+
     newCanvas.id =
         "dataChart";
 
@@ -738,6 +778,7 @@ function showChart(chart) {
 
         const labels =
             chart.labels || [];
+
 
         const values =
             chart.matrix ||
@@ -1643,8 +1684,10 @@ function setupExportButtons(data) {
                 "button"
             );
 
+
         csvButton.innerText =
             "Download Result CSV";
+
 
         csvButton.type =
             "button";
@@ -1669,6 +1712,44 @@ function setupExportButtons(data) {
 
 
     // =========================
+    // PDF BUTTON
+    // =========================
+
+    if (data) {
+
+        const pdfButton =
+            document.createElement(
+                "button"
+            );
+
+
+        pdfButton.innerText =
+            "Download Result PDF";
+
+
+        pdfButton.type =
+            "button";
+
+
+        pdfButton.addEventListener(
+            "click",
+            function () {
+
+                downloadResultPDF(
+                    data
+                );
+
+            }
+        );
+
+
+        exportBox.appendChild(
+            pdfButton
+        );
+    }
+
+
+    // =========================
     // PNG BUTTON
     // =========================
 
@@ -1682,8 +1763,10 @@ function setupExportButtons(data) {
                 "button"
             );
 
+
         pngButton.innerText =
             "Download Chart PNG";
+
 
         pngButton.type =
             "button";
@@ -1705,14 +1788,6 @@ function setupExportButtons(data) {
         exportBox.appendChild(
             pngButton
         );
-    }
-
-
-    if (
-        exportBox.children.length === 0
-    ) {
-
-        exportBox.remove();
     }
 }
 
@@ -1848,10 +1923,402 @@ function csvEscape(value) {
 
 
 // =========================
+// DOWNLOAD RESULT PDF
+// =========================
+
+function downloadResultPDF(data) {
+
+    if (
+        !window.jspdf ||
+        !window.jspdf.jsPDF
+    ) {
+
+        alert(
+            "PDF library is not loaded."
+        );
+
+        return;
+    }
+
+
+    const jsPDF =
+        window.jspdf.jsPDF;
+
+
+    const pdf =
+        new jsPDF();
+
+
+    const question =
+        String(
+            data.question || ""
+        );
+
+
+    const answer =
+        String(
+            data.answer || ""
+        );
+
+
+    const result =
+        String(
+            data.result ?? ""
+        );
+
+
+    const code =
+        String(
+            data.code || ""
+        );
+
+
+    let y = 20;
+
+
+    // =========================
+    // TITLE
+    // =========================
+
+    pdf.setFontSize(
+        18
+    );
+
+
+    pdf.setFont(
+        "helvetica",
+        "bold"
+    );
+
+
+    pdf.text(
+        "Conversational Data Analysis Assistant",
+        20,
+        y
+    );
+
+
+    y += 15;
+
+
+    // =========================
+    // QUESTION
+    // =========================
+
+    pdf.setFontSize(
+        12
+    );
+
+
+    pdf.setFont(
+        "helvetica",
+        "bold"
+    );
+
+
+    pdf.text(
+        "Question:",
+        20,
+        y
+    );
+
+
+    y += 7;
+
+
+    pdf.setFont(
+        "helvetica",
+        "normal"
+    );
+
+
+    const questionLines =
+        pdf.splitTextToSize(
+            question,
+            170
+        );
+
+
+    pdf.text(
+        questionLines,
+        20,
+        y
+    );
+
+
+    y +=
+        questionLines.length * 6 +
+        8;
+
+
+    // =========================
+    // ANSWER
+    // =========================
+
+    if (y > 270) {
+
+        pdf.addPage();
+
+        y = 20;
+    }
+
+
+    pdf.setFont(
+        "helvetica",
+        "bold"
+    );
+
+
+    pdf.text(
+        "Answer:",
+        20,
+        y
+    );
+
+
+    y += 7;
+
+
+    pdf.setFont(
+        "helvetica",
+        "normal"
+    );
+
+
+    const answerLines =
+        pdf.splitTextToSize(
+            answer,
+            170
+        );
+
+
+    for (
+        let i = 0;
+        i < answerLines.length;
+        i++
+    ) {
+
+        if (y > 275) {
+
+            pdf.addPage();
+
+            y = 20;
+        }
+
+
+        pdf.text(
+            answerLines[i],
+            20,
+            y
+        );
+
+
+        y += 6;
+    }
+
+
+    y += 8;
+
+
+    // =========================
+    // VERIFIED RESULT
+    // =========================
+
+    if (result) {
+
+        if (y > 260) {
+
+            pdf.addPage();
+
+            y = 20;
+        }
+
+
+        pdf.setFont(
+            "helvetica",
+            "bold"
+        );
+
+
+        pdf.text(
+            "Verified Result:",
+            20,
+            y
+        );
+
+
+        y += 7;
+
+
+        pdf.setFont(
+            "helvetica",
+            "normal"
+        );
+
+
+        const resultLines =
+            pdf.splitTextToSize(
+                result,
+                170
+            );
+
+
+        for (
+            let i = 0;
+            i < resultLines.length;
+            i++
+        ) {
+
+            if (y > 275) {
+
+                pdf.addPage();
+
+                y = 20;
+            }
+
+
+            pdf.text(
+                resultLines[i],
+                20,
+                y
+            );
+
+
+            y += 6;
+        }
+
+
+        y += 8;
+    }
+
+
+    // =========================
+    // GENERATED CODE
+    // =========================
+
+    if (code) {
+
+        if (y > 250) {
+
+            pdf.addPage();
+
+            y = 20;
+        }
+
+
+        pdf.setFont(
+            "helvetica",
+            "bold"
+        );
+
+
+        pdf.text(
+            "Generated Code:",
+            20,
+            y
+        );
+
+
+        y += 7;
+
+
+        pdf.setFont(
+            "courier",
+            "normal"
+        );
+
+
+        pdf.setFontSize(
+            9
+        );
+
+
+        const codeLines =
+            pdf.splitTextToSize(
+                code,
+                170
+            );
+
+
+        for (
+            let i = 0;
+            i < codeLines.length;
+            i++
+        ) {
+
+            if (y > 275) {
+
+                pdf.addPage();
+
+                y = 20;
+            }
+
+
+            pdf.text(
+                codeLines[i],
+                20,
+                y
+            );
+
+
+            y += 5;
+        }
+    }
+
+
+    // =========================
+    // FOOTER
+    // =========================
+
+    const pageCount =
+        pdf.internal.getNumberOfPages();
+
+
+    for (
+        let i = 1;
+        i <= pageCount;
+        i++
+    ) {
+
+        pdf.setPage(i);
+
+
+        pdf.setFont(
+            "helvetica",
+            "normal"
+        );
+
+
+        pdf.setFontSize(
+            8
+        );
+
+
+        pdf.text(
+            "Generated by Conversational Data Analysis Assistant",
+            20,
+            290
+        );
+    }
+
+
+    // =========================
+    // SAVE PDF
+    // =========================
+
+    pdf.save(
+        "analysis_result.pdf"
+    );
+}
+
+
+// =========================
 // DOWNLOAD CHART PNG
 // =========================
 
-function downloadChartPNG(title) {
+function downloadChartPNG(
+    title
+) {
 
     if (!currentChart) {
 
@@ -1921,7 +2388,9 @@ function downloadChartPNG(title) {
 // SAFE FILE NAME
 // =========================
 
-function sanitizeFileName(name) {
+function sanitizeFileName(
+    name
+) {
 
     return String(
         name ||
