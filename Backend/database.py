@@ -162,15 +162,52 @@ def save_query(session_id, question, answer, generated_code):
     return query_id
 
 
+def save_chart(query_id, chart_type, chart_data):
+
+    connection = connect_db()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO charts
+        (query_id, chart_type, chart_data)
+        VALUES (%s, %s, %s)
+    """, (
+        query_id,
+        chart_type,
+        chart_data
+    ))
+
+    chart_id = cursor.fetchone()[0] if cursor.description else None
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+    return chart_id
+
+
 def get_history():
 
     connection = connect_db()
     cursor = connection.cursor()
 
     cursor.execute("""
-        SELECT question, answer, created_at
-        FROM queries
-        ORDER BY created_at DESC
+        SELECT
+            q.id,
+            q.question,
+            q.answer,
+            q.created_at,
+            c.chart_type,
+            c.chart_data
+        FROM queries AS q
+        LEFT JOIN LATERAL (
+            SELECT chart_type, chart_data
+            FROM charts
+            WHERE query_id = q.id
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        ) AS c ON TRUE
+        ORDER BY q.created_at DESC
         LIMIT 50
     """)
 
@@ -180,3 +217,58 @@ def get_history():
     connection.close()
 
     return rows
+
+
+def delete_query(query_id):
+
+    connection = connect_db()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            "SELECT id FROM queries WHERE id = %s FOR UPDATE",
+            (query_id,)
+        )
+
+        if cursor.fetchone() is None:
+            connection.rollback()
+            return False
+
+        cursor.execute(
+            "DELETE FROM charts WHERE query_id = %s",
+            (query_id,)
+        )
+        cursor.execute(
+            "DELETE FROM queries WHERE id = %s",
+            (query_id,)
+        )
+        connection.commit()
+        return True
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def delete_all_queries():
+
+    connection = connect_db()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute("""
+            DELETE FROM charts
+            WHERE query_id IN (SELECT id FROM queries)
+        """)
+        cursor.execute("DELETE FROM queries")
+        deleted_count = cursor.rowcount
+        connection.commit()
+        return deleted_count
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()

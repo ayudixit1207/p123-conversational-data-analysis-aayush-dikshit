@@ -31,6 +31,10 @@
 
     <section class="card">
 
+        <button id="deleteAllHistory" type="button">
+            Delete All History
+        </button>
+
         <div id="history">
             Loading history...
         </div>
@@ -40,36 +44,104 @@
 </div>
 
 <script>
+async function loadHistory() {
+    const box = document.getElementById("history");
 
-fetch("/history-data")
-    .then(response => response.json())
-    .then(data => {
+    try {
+        const response = await fetch("/history-data");
+        const history = await response.json();
+        const deleteAllButton = document.getElementById("deleteAllHistory");
 
-        const box = document.getElementById("history");
+        if (!response.ok) {
+            throw new Error(history.error || "Could not load history.");
+        }
 
-        if (data.length === 0) {
+        box.replaceChildren();
 
-            box.innerHTML = "<p>No queries yet.</p>";
-
+        if (history.length === 0) {
+            box.innerText = "No queries yet.";
+            deleteAllButton.disabled = true;
             return;
         }
 
-        box.innerHTML = data.map(item => `
+        deleteAllButton.disabled = false;
 
-            <div class="history-item">
+        history.forEach(item => {
+            const entry = document.createElement("div");
+            entry.className = "history-item";
 
-                <h3>${item.question}</h3>
+            const question = document.createElement("h3");
+            question.innerText = item.question;
 
-                <p>${item.answer}</p>
+            const answer = document.createElement("p");
+            answer.innerText = item.answer;
 
-                <small>${item.created_at}</small>
+            const createdAt = document.createElement("small");
+            createdAt.innerText = item.created_at;
 
-            </div>
+            entry.append(question, answer, createdAt);
 
-        `).join("");
+            if (item.chart) {
+                const chartInfo = document.createElement("p");
+                chartInfo.innerText = `Chart: ${item.chart.type}`;
+                entry.appendChild(chartInfo);
+            }
 
-    });
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.innerText = "Delete";
+            deleteButton.addEventListener("click", async () => {
+                if (!window.confirm("Delete this history entry?")) {
+                    return;
+                }
 
+                try {
+                    const deleteResponse = await fetch(
+                        `/history-data/${encodeURIComponent(item.query_id)}`,
+                        { method: "DELETE" }
+                    );
+                    const result = await deleteResponse.json();
+
+                    if (!deleteResponse.ok) {
+                        throw new Error(result.error || "Could not delete entry.");
+                    }
+
+                    await loadHistory();
+                } catch (error) {
+                    window.alert(error.message);
+                }
+            });
+
+            entry.appendChild(deleteButton);
+            box.appendChild(entry);
+        });
+    } catch (error) {
+        box.innerText = error.message;
+    }
+}
+
+document.getElementById("deleteAllHistory").addEventListener("click", async () => {
+    if (!window.confirm("Delete all query history? This cannot be undone.")) {
+        return;
+    }
+
+    try {
+        const response = await fetch("/delete-all-history", {
+            method: "DELETE",
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || "Could not delete history.");
+        }
+
+        await loadHistory();
+    } catch (error) {
+        window.alert(error.message);
+    }
+});
+
+loadHistory();
 </script>
 
 </body>

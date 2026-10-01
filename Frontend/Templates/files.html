@@ -73,6 +73,11 @@
 </h2>
 
 
+<button id="deleteAllFiles" type="button">
+    Delete All Files
+</button>
+
+
 <p id="filesMessage"></p>
 
 
@@ -164,6 +169,10 @@ async function loadFiles() {
             data.files.length === 0
         ) {
 
+            document.getElementById(
+                "deleteAllFiles"
+            ).disabled = true;
+
             table.innerHTML = `
 
                 <tr>
@@ -180,6 +189,10 @@ async function loadFiles() {
 
             return;
         }
+
+        document.getElementById(
+            "deleteAllFiles"
+        ).disabled = false;
 
 
         data.files.forEach(
@@ -229,6 +242,31 @@ async function loadFiles() {
     }
 
 }
+
+
+document.getElementById("deleteAllFiles").addEventListener("click", async function() {
+    if (!confirm("Delete all uploaded files? This cannot be undone.")) {
+        return;
+    }
+
+    const message = document.getElementById("filesMessage");
+
+    try {
+        const response = await fetch("/delete-all-files", {
+            method: "POST",
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Could not delete files.");
+        }
+
+        message.innerText = data.message;
+        await loadFiles();
+    } catch (error) {
+        message.innerText = "Delete error: " + error.message;
+    }
+});
 
 
 // =================================================

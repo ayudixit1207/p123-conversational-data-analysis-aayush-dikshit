@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import json
 from pathlib import Path
 import uuid
 
@@ -28,6 +29,9 @@ from Backend.database import (
     save_dataset,
     create_session,
     save_query,
+    save_chart,
+    delete_query,
+    delete_all_queries,
     get_history
 )
 
@@ -1594,7 +1598,7 @@ def ask_question():
 
             if current_session_id:
 
-                save_query(
+                query_id = save_query(
 
                     current_session_id,
 
@@ -1606,11 +1610,24 @@ def ask_question():
 
                 )
 
+                if chart["type"] is not None:
+                    save_chart(
+                        query_id,
+                        chart["type"],
+                        json.dumps(chart)
+                    )
+
+            else:
+                query_id = None
+
 
             return jsonify({
 
                 "question":
                     question,
+
+                "query_id":
+                    query_id,
 
                 "type":
                     "chart",
@@ -1934,9 +1951,11 @@ Rules:
         # SAVE HISTORY
         # ==========================================
 
+        query_id = None
+
         if current_session_id:
 
-            save_query(
+            query_id = save_query(
 
                 current_session_id,
 
@@ -1953,6 +1972,9 @@ Rules:
 
             "question":
                 question,
+
+            "query_id":
+                query_id,
 
             "type":
                 question_type,
@@ -2011,16 +2033,35 @@ def history_data():
 
         for row in rows:
 
+            chart = None
+
+            if row[4] is not None:
+                try:
+                    chart_data = json.loads(row[5])
+                except (TypeError, json.JSONDecodeError):
+                    chart_data = row[5]
+
+                chart = {
+                    "type": row[4],
+                    "data": chart_data
+                }
+
             history.append({
 
-                "question":
+                "query_id":
                     row[0],
 
-                "answer":
+                "question":
                     row[1],
 
+                "answer":
+                    row[2],
+
                 "created_at":
-                    str(row[2])
+                    str(row[3]),
+
+                "chart":
+                    chart
 
             })
 
@@ -2037,4 +2078,85 @@ def history_data():
             "error":
                 str(error)
 
+        }), 500
+
+
+@routes.route(
+    "/history-data/<int:query_id>",
+    methods=["DELETE"]
+)
+def delete_history_query(query_id):
+
+    try:
+        if not delete_query(query_id):
+            return jsonify({
+                "error": "History entry not found"
+            }), 404
+
+        return jsonify({
+            "message": "History entry deleted"
+        })
+    except Exception as error:
+        return jsonify({
+            "error": str(error)
+        }), 500
+
+
+@routes.route(
+    "/delete-all-files",
+    methods=["POST"]
+)
+def delete_all_files():
+
+    global current_data
+    global current_dataset_id
+    global current_session_id
+    global all_uploaded_files
+    global session_uploaded_files
+
+    try:
+        restore_uploaded_files()
+        deleted_count = len(all_uploaded_files)
+
+        for file_info in all_uploaded_files:
+            file_path = file_info.get("path")
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+
+        all_uploaded_files = []
+        session_uploaded_files = []
+        current_data = None
+        current_dataset_id = None
+        current_session_id = None
+
+        try:
+            delete_collection("dataset_chunks")
+        except Exception as error:
+            print("Qdrant delete error:", error)
+
+        return jsonify({
+            "message": f"Deleted {deleted_count} uploaded file(s).",
+            "files": [],
+            "total_files": 0,
+        })
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+
+@routes.route(
+    "/delete-all-history",
+    methods=["DELETE"]
+)
+def delete_all_history_entries():
+
+    try:
+        deleted_count = delete_all_queries()
+        entry_label = "entry" if deleted_count == 1 else "entries"
+        return jsonify({
+            "message": f"Deleted {deleted_count} history {entry_label}.",
+            "deleted_count": deleted_count
+        })
+    except Exception as error:
+        return jsonify({
+            "error": str(error)
         }), 500
