@@ -429,7 +429,10 @@ async function askQuestion() {
         }
 
         if (answerBox) {
-            answerBox.innerText = data.answer || "No answer received.";
+            renderMarkdownAnswer(
+                answerBox,
+                data.answer || "No answer received."
+            );
         }
 
         if (codeBox) {
@@ -446,6 +449,18 @@ async function askQuestion() {
             answerBox.innerText = "Error: " + error.message;
         }
     }
+}
+
+
+function renderMarkdownAnswer(element, markdown) {
+    if (window.marked?.parse && window.DOMPurify?.sanitize) {
+        element.innerHTML = window.DOMPurify.sanitize(
+            window.marked.parse(String(markdown))
+        );
+        return;
+    }
+
+    element.textContent = String(markdown);
 }
 
 

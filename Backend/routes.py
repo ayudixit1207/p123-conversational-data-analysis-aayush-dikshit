@@ -2,19 +2,23 @@ from flask import Blueprint, jsonify, request, render_template
 import pandas as pd
 import numpy as np
 import os
+import re
 from pathlib import Path
 import uuid
 
 from Backend.ingestion import save_file, read_csv
 from Backend.processing import get_profile
-from Backend.chunking import create_chunks, create_text
+
+from Backend.chunking import create_all_chunks
+
 from Backend.embedding import create_embeddings
+
 from Backend.qdrant import (
     store_vectors,
     delete_collection
 )
-from Backend.rag import get_relevant_data
 
+from Backend.rag import get_relevant_data
 
 from Backend.classifier import classify_question
 from Backend.ai import generate_code, explain_result
@@ -28,8 +32,6 @@ from Backend.database import (
 )
 
 
-
-
 routes = Blueprint("routes", __name__)
 
 
@@ -38,6 +40,7 @@ current_dataset_id = None
 current_session_id = None
 
 all_uploaded_files = []
+session_uploaded_files = []
 
 
 def public_file_info(file_info):
@@ -50,49 +53,75 @@ def public_file_info(file_info):
 
 
 def restore_uploaded_files():
-    global current_data
+
     global all_uploaded_files
 
     known_paths = {
-        os.path.normcase(os.path.abspath(file_info["path"]))
+        os.path.normcase(
+            os.path.abspath(file_info["path"])
+        )
         for file_info in all_uploaded_files
     }
-    restored_frames = []
 
     for path in sorted(Path("Uploads").glob("*.csv")):
-        normalized_path = os.path.normcase(os.path.abspath(path))
+
+        normalized_path = os.path.normcase(
+            os.path.abspath(path)
+        )
+
         if normalized_path in known_paths:
             continue
 
         try:
-            dataframe = read_csv(str(path))
+
+            dataframe = read_csv(
+                str(path)
+            )
+
         except Exception as error:
-            print(f"Could not load uploaded file {path.name}: {error}")
+
+            print(
+                f"Could not load uploaded file "
+                f"{path.name}: {error}"
+            )
+
             continue
 
         stored_name = path.name
-        prefix, separator, original_name = stored_name.partition("_")
+
+        prefix, separator, original_name = (
+            stored_name.partition("_")
+        )
+
         if (
             separator
             and len(prefix) == 32
-            and all(character in "0123456789abcdef" for character in prefix.lower())
+            and all(
+                character in
+                "0123456789abcdef"
+                for character in prefix.lower()
+            )
         ):
+
             stored_name = original_name
 
         all_uploaded_files.append({
+
             "id": path.name,
+
             "name": stored_name,
+
             "path": str(path),
+
             "rows": len(dataframe),
+
             "columns": len(dataframe.columns),
-            "schema": list(dataframe.columns)
+
+            "schema": list(
+                dataframe.columns
+            )
+
         })
-        restored_frames.append(dataframe)
-
-    if restored_frames:
-        frames = ([current_data] if current_data is not None else []) + restored_frames
-        current_data = pd.concat(frames, ignore_index=True)
-
 
 # ==================================================
 # PAGES
@@ -159,24 +188,107 @@ def make_chart_data(data, question):
     )
 
     chart = {
+
         "type": None,
+
         "title": "",
+
         "labels": [],
+
         "values": [],
+
         "points": [],
+
         "matrix": []
     }
+
+    normalized_question = re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        question
+    ).strip()
+    padded_question = f" {normalized_question} "
+
+    def columns_mentioned(columns):
+        matches = []
+
+        for column in columns:
+            normalized_column = re.sub(
+                r"[^a-z0-9]+",
+                " ",
+                str(column).lower()
+            ).strip()
+            position = padded_question.find(
+                f" {normalized_column} "
+            )
+
+            if position >= 0:
+                matches.append((position, column))
+
+        return [
+            column
+            for _, column in sorted(matches)
+        ]
+
+    mentioned_columns = columns_mentioned(
+        data.columns
+    )
+    mentioned_numeric = [
+        column
+        for column in mentioned_columns
+        if column in numeric_columns
+    ]
+    mentioned_categorical = [
+        column
+        for column in mentioned_columns
+        if column in categorical_columns
+    ]
+
+    inferred_chart_type = None
+    has_explicit_chart_type = any(
+        chart_type in question
+        for chart_type in [
+            "bar",
+            "pie",
+            "line",
+            "histogram",
+            "scatter",
+            "heatmap",
+        ]
+    )
+
+    if not has_explicit_chart_type:
+        if (
+            "versus" in padded_question
+            or " vs " in padded_question
+        ) and len(mentioned_numeric) >= 2:
+            inferred_chart_type = "scatter"
+        elif "distribution" in question:
+            if mentioned_categorical and mentioned_numeric:
+                inferred_chart_type = "bar"
+            elif mentioned_categorical:
+                inferred_chart_type = "pie"
+            elif mentioned_numeric:
+                inferred_chart_type = "histogram"
+        elif " by " in padded_question and mentioned_categorical:
+            inferred_chart_type = "bar"
 
 
     # =================================================
     # PIE
     # =================================================
 
-    if "pie" in question:
+    if "pie" in question or inferred_chart_type == "pie":
 
-        if len(categorical_columns) > 0:
+        if len(categorical_columns) > 0 or mentioned_numeric:
 
-            column = categorical_columns[0]
+            column = (
+                mentioned_categorical[0]
+                if mentioned_categorical
+                else mentioned_numeric[0]
+                if mentioned_numeric
+                else categorical_columns[0]
+            )
 
             counts = (
                 data[column]
@@ -209,12 +321,19 @@ def make_chart_data(data, question):
     elif "heatmap" in question:
 
         heatmap_columns = [
+
             column
+
             for column in numeric_columns
+
             if column.lower() not in [
+
                 "id",
+
                 "employee_id",
+
                 "student_id",
+
                 "user_id"
             ]
         ]
@@ -235,15 +354,20 @@ def make_chart_data(data, question):
             )
 
             chart["labels"] = [
+
                 str(column)
+
                 for column in heatmap_columns
             ]
 
             chart["matrix"] = [
+
                 [
                     float(value)
+
                     for value in row
                 ]
+
                 for row in correlation.values
             ]
 
@@ -252,11 +376,18 @@ def make_chart_data(data, question):
     # HISTOGRAM
     # =================================================
 
-    elif "histogram" in question:
+    elif (
+        "histogram" in question
+        or inferred_chart_type == "histogram"
+    ):
 
         if len(numeric_columns) > 0:
 
-            column = numeric_columns[0]
+            column = (
+                mentioned_numeric[0]
+                if mentioned_numeric
+                else numeric_columns[0]
+            )
 
             values = (
                 pd.to_numeric(
@@ -280,12 +411,19 @@ def make_chart_data(data, question):
                 )
 
                 chart["labels"] = [
-                    round(float(value), 2)
+
+                    round(
+                        float(value),
+                        2
+                    )
+
                     for value in bins[:-1]
                 ]
 
                 chart["values"] = [
+
                     int(value)
+
                     for value in counts
                 ]
 
@@ -294,13 +432,22 @@ def make_chart_data(data, question):
     # SCATTER
     # =================================================
 
-    elif "scatter" in question:
+    elif (
+        "scatter" in question
+        or inferred_chart_type == "scatter"
+    ):
 
         if len(numeric_columns) >= 2:
 
-            x_column = numeric_columns[0]
+            scatter_columns = list(mentioned_numeric)
 
-            y_column = numeric_columns[1]
+            for column in numeric_columns:
+                if column not in scatter_columns:
+                    scatter_columns.append(column)
+
+            x_column = scatter_columns[0]
+
+            y_column = scatter_columns[1]
 
             clean_data = (
                 data[
@@ -321,10 +468,19 @@ def make_chart_data(data, question):
             )
 
             chart["points"] = [
+
                 {
-                    "x": float(row[x_column]),
-                    "y": float(row[y_column])
+                    "x":
+                        float(
+                            row[x_column]
+                        ),
+
+                    "y":
+                        float(
+                            row[y_column]
+                        )
                 }
+
                 for _, row
                 in clean_data.iterrows()
             ]
@@ -336,9 +492,83 @@ def make_chart_data(data, question):
 
     elif "line" in question:
 
+        if mentioned_categorical and not mentioned_numeric:
+            column = mentioned_categorical[0]
+            counts = (
+                data[column]
+                .dropna()
+                .value_counts()
+                .head(200)
+            )
+
+            chart["type"] = "line"
+            chart["title"] = f"{column} Distribution"
+            chart["labels"] = [
+                str(value)
+                for value in counts.index
+            ]
+            chart["values"] = [
+                int(value)
+                for value in counts.values
+            ]
+
+            return chart
+
         if len(numeric_columns) > 0:
 
-            column = numeric_columns[0]
+            if mentioned_categorical and mentioned_numeric:
+                category_column = mentioned_categorical[0]
+                value_column = mentioned_numeric[0]
+                grouped_values = (
+                    data.groupby(category_column)[value_column]
+                    .mean()
+                    .dropna()
+                    .head(200)
+                )
+
+                chart["type"] = "line"
+                chart["title"] = (
+                    f"Average {value_column} by {category_column}"
+                )
+                chart["labels"] = [
+                    str(value)
+                    for value in grouped_values.index
+                ]
+                chart["values"] = [
+                    float(value)
+                    for value in grouped_values.values
+                ]
+
+                return chart
+
+            if len(mentioned_numeric) >= 2:
+                x_column = mentioned_numeric[0]
+                y_column = mentioned_numeric[1]
+                clean_data = (
+                    data[[x_column, y_column]]
+                    .apply(pd.to_numeric, errors="coerce")
+                    .dropna()
+                    .head(200)
+                )
+
+                chart["type"] = "line"
+                chart["title"] = f"{y_column} by {x_column}"
+                chart["labels"] = [
+                    str(value)
+                    for value in clean_data[x_column]
+                ]
+                chart["values"] = [
+                    float(value)
+                    for value in clean_data[y_column]
+                ]
+
+                return chart
+
+            column = (
+                mentioned_numeric[0]
+                if mentioned_numeric
+                else numeric_columns[0]
+            )
 
             values = (
                 pd.to_numeric(
@@ -356,12 +586,18 @@ def make_chart_data(data, question):
             )
 
             chart["labels"] = [
+
                 str(i + 1)
-                for i in range(len(values))
+
+                for i in range(
+                    len(values)
+                )
             ]
 
             chart["values"] = [
+
                 float(value)
+
                 for value in values
             ]
 
@@ -370,11 +606,42 @@ def make_chart_data(data, question):
     # BAR
     # =================================================
 
-    elif "bar" in question:
+    elif "bar" in question or inferred_chart_type == "bar":
 
-        if len(categorical_columns) > 0:
+        if mentioned_categorical and mentioned_numeric:
 
-            column = categorical_columns[0]
+            category_column = mentioned_categorical[0]
+            value_column = mentioned_numeric[0]
+            grouped_values = (
+                data.groupby(category_column)[value_column]
+                .mean()
+                .dropna()
+                .head(10)
+            )
+
+            chart["type"] = "bar"
+            chart["title"] = (
+                f"Average {value_column} by {category_column}"
+            )
+            chart["labels"] = [
+                str(value)
+                for value in grouped_values.index
+            ]
+            chart["values"] = [
+                float(value)
+                for value in grouped_values.values
+            ]
+
+        elif mentioned_categorical or (
+            not mentioned_numeric
+            and len(categorical_columns) > 0
+        ):
+
+            column = (
+                mentioned_categorical[0]
+                if mentioned_categorical
+                else categorical_columns[0]
+            )
 
             counts = (
                 data[column]
@@ -390,18 +657,26 @@ def make_chart_data(data, question):
             )
 
             chart["labels"] = [
+
                 str(value)
+
                 for value in counts.index
             ]
 
             chart["values"] = [
+
                 int(value)
+
                 for value in counts.values
             ]
 
         elif len(numeric_columns) > 0:
 
-            column = numeric_columns[0]
+            column = (
+                mentioned_numeric[0]
+                if mentioned_numeric
+                else numeric_columns[0]
+            )
 
             values = (
                 pd.to_numeric(
@@ -419,12 +694,18 @@ def make_chart_data(data, question):
             )
 
             chart["labels"] = [
+
                 str(i + 1)
-                for i in range(len(values))
+
+                for i in range(
+                    len(values)
+                )
             ]
 
             chart["values"] = [
+
                 float(value)
+
                 for value in values
             ]
 
@@ -446,6 +727,7 @@ def upload_file():
     global current_dataset_id
     global current_session_id
     global all_uploaded_files
+    global session_uploaded_files
 
     try:
 
@@ -466,12 +748,15 @@ def upload_file():
         else:
 
             return jsonify({
+
                 "error":
                     "No file uploaded"
+
             }), 400
 
 
         new_data = []
+
         new_files = []
 
 
@@ -503,7 +788,9 @@ def upload_file():
             new_files.append({
 
                 "id":
-                    os.path.basename(file_path),
+                    os.path.basename(
+                        file_path
+                    ),
 
                 "name":
                     file.filename,
@@ -526,8 +813,10 @@ def upload_file():
         if not new_data:
 
             return jsonify({
+
                 "error":
                     "No valid CSV files found"
+
             }), 400
 
 
@@ -538,19 +827,27 @@ def upload_file():
         if current_data is None:
 
             current_data = pd.concat(
+
                 new_data,
+
                 ignore_index=True
             )
 
         else:
 
             current_data = pd.concat(
+
                 [current_data] + new_data,
+
                 ignore_index=True
             )
 
 
         all_uploaded_files.extend(
+            new_files
+        )
+
+        session_uploaded_files.extend(
             new_files
         )
 
@@ -595,23 +892,32 @@ def upload_file():
         # ------------------------------------------
 
         profile = get_profile(
+
             current_data,
-            source_files=all_uploaded_files
+
+            source_files=
+                session_uploaded_files
         )
 
 
         profile["total_files"] = (
-            len(all_uploaded_files)
+            len(session_uploaded_files)
         )
 
 
-        profile["files"] = (
-            [public_file_info(file) for file in all_uploaded_files]
-        )
+        profile["files"] = [
+
+            public_file_info(
+                file
+            )
+
+            for file
+            in session_uploaded_files
+        ]
 
 
         # ------------------------------------------
-        # CHUNKS
+        # PRIMARY + SECONDARY CHUNKS
         # ------------------------------------------
 
         texts = []
@@ -623,19 +929,16 @@ def upload_file():
             new_data
         ):
 
-            chunks = create_chunks(
+            file_texts = create_all_chunks(
                 data
             )
 
 
-            for chunk in chunks:
+            for text in file_texts:
 
                 texts.append(
-                    create_text(
-                        chunk
-                    )
+                    text
                 )
-
 
                 vector_file_names.append(
                     new_files[index]["name"]
@@ -672,7 +975,14 @@ def upload_file():
                 "Files uploaded successfully",
 
             "files":
-                [public_file_info(file) for file in all_uploaded_files],
+                [
+                    public_file_info(
+                        file
+                    )
+
+                    for file
+                    in all_uploaded_files
+                ],
 
             "total_files":
                 len(all_uploaded_files),
@@ -693,7 +1003,10 @@ def upload_file():
 
 
         return jsonify({
-            "error": str(error)
+
+            "error":
+                str(error)
+
         }), 500
 
 
@@ -709,7 +1022,14 @@ def files_data():
     return jsonify({
 
         "files":
-            [public_file_info(file) for file in all_uploaded_files]
+            [
+                public_file_info(
+                    file
+                )
+
+                for file
+                in all_uploaded_files
+            ]
 
     })
 
@@ -720,28 +1040,56 @@ def dataset_profile():
     restore_uploaded_files()
 
     if current_data is None:
+
         profile = {
+
             "rows": 0,
+
             "columns": 0,
+
             "total_missing": 0,
+
             "duplicate_rows": 0,
+
             "column_details": [],
+
             "numeric_summary": [],
-            "preview": [],
+
+            "preview": []
+
         }
+
     else:
+
         profile = get_profile(
+
             current_data,
-            source_files=all_uploaded_files,
+
+            source_files=
+                session_uploaded_files
         )
 
-    profile["total_files"] = len(all_uploaded_files)
+
+    profile["total_files"] = (
+        len(session_uploaded_files)
+    )
+
+
     profile["files"] = [
+
         public_file_info(file)
-        for file in all_uploaded_files
+
+        for file
+        in session_uploaded_files
     ]
 
-    return jsonify({"profile": profile})
+
+    return jsonify({
+
+        "profile":
+            profile
+
+    })
 
 
 # ==================================================
@@ -758,6 +1106,7 @@ def delete_file():
     global current_dataset_id
     global current_session_id
     global all_uploaded_files
+    global session_uploaded_files
 
     try:
 
@@ -768,14 +1117,18 @@ def delete_file():
         ) or {}
 
 
-        file_id = data.get("file_id")
+        file_id = data.get(
+            "file_id"
+        )
 
 
         if not file_id:
 
             return jsonify({
+
                 "error":
                     "File ID is required"
+
             }), 400
 
 
@@ -783,15 +1136,17 @@ def delete_file():
         # FIND FILE
         # ------------------------------------------
 
-        selected_file = None
-
-
         selected_file = next(
+
             (
                 file_info
-                for file_info in all_uploaded_files
+
+                for file_info
+                in all_uploaded_files
+
                 if file_info["id"] == file_id
             ),
+
             None
         )
 
@@ -799,8 +1154,10 @@ def delete_file():
         if selected_file is None:
 
             return jsonify({
+
                 "error":
                     "File not found"
+
             }), 404
 
 
@@ -828,9 +1185,18 @@ def delete_file():
         # ------------------------------------------
 
         all_uploaded_files = [
+
             file_info
+
             for file_info
             in all_uploaded_files
+
+            if file_info["id"] != file_id
+        ]
+
+        session_uploaded_files = [
+            file_info
+            for file_info in session_uploaded_files
             if file_info["id"] != file_id
         ]
 
@@ -840,6 +1206,11 @@ def delete_file():
         # ------------------------------------------
 
         dataframes = []
+        active_dataframes = []
+        session_file_ids = {
+            file_info["id"]
+            for file_info in session_uploaded_files
+        }
 
 
         for file_info in all_uploaded_files:
@@ -862,11 +1233,16 @@ def delete_file():
                     dataframe
                 )
 
+                if file_info["id"] in session_file_ids:
+                    active_dataframes.append(dataframe)
 
-        if dataframes:
+
+        if active_dataframes:
 
             current_data = pd.concat(
-                dataframes,
+
+                active_dataframes,
+
                 ignore_index=True
             )
 
@@ -874,7 +1250,9 @@ def delete_file():
 
             current_data = None
 
+
         current_dataset_id = None
+
         current_session_id = None
 
 
@@ -907,7 +1285,7 @@ def delete_file():
                 dataframes
             ):
 
-                chunks = create_chunks(
+                file_texts = create_all_chunks(
                     dataframe
                 )
 
@@ -918,14 +1296,11 @@ def delete_file():
                 )
 
 
-                for chunk in chunks:
+                for text in file_texts:
 
                     texts.append(
-                        create_text(
-                            chunk
-                        )
+                        text
                     )
-
 
                     vector_file_names.append(
                         current_file_name
@@ -959,32 +1334,52 @@ def delete_file():
         if current_data is not None:
 
             profile = get_profile(
+
                 current_data,
-                source_files=all_uploaded_files,
+
+                source_files=
+                    session_uploaded_files
             )
 
         else:
+
             profile = {
+
                 "rows": 0,
+
                 "columns": 0,
+
                 "total_missing": 0,
+
                 "duplicate_rows": 0,
+
                 "column_details": [],
+
                 "numeric_summary": [],
+
                 "categorical_summary": [],
+
                 "preview": [],
-                "preview_groups": [],
+
+                "preview_groups": []
+
             }
 
 
         profile["total_files"] = (
-            len(all_uploaded_files)
+            len(session_uploaded_files)
         )
 
 
-        profile["files"] = (
-            [public_file_info(file) for file in all_uploaded_files]
-        )
+        profile["files"] = [
+
+            public_file_info(
+                file
+            )
+
+            for file
+                in session_uploaded_files
+        ]
 
 
         return jsonify({
@@ -993,7 +1388,14 @@ def delete_file():
                 f"{selected_file['name']} deleted successfully.",
 
             "files":
-                [public_file_info(file) for file in all_uploaded_files],
+                [
+                    public_file_info(
+                        file
+                    )
+
+                    for file
+                    in all_uploaded_files
+                ],
 
             "total_files":
                 len(all_uploaded_files),
@@ -1014,7 +1416,10 @@ def delete_file():
 
 
         return jsonify({
-            "error": str(error)
+
+            "error":
+                str(error)
+
         }), 500
 
 
@@ -1035,11 +1440,14 @@ def ask_question():
 
         restore_uploaded_files()
 
+
         if current_data is None:
 
             return jsonify({
+
                 "error":
                     "Please upload a CSV first"
+
             }), 400
 
 
@@ -1057,8 +1465,10 @@ def ask_question():
         if not question:
 
             return jsonify({
+
                 "error":
                     "Question is required"
+
             }), 400
 
 
@@ -1135,6 +1545,7 @@ def ask_question():
         else:
 
             question_type = (
+
                 classify_question(
                     question
                 )
@@ -1166,6 +1577,7 @@ def ask_question():
             if chart["type"] is None:
 
                 answer = (
+
                     "I could not create the "
                     "requested chart from the "
                     "available data."
@@ -1174,6 +1586,7 @@ def ask_question():
             else:
 
                 answer = (
+
                     "Chart generated from "
                     "the uploaded data."
                 )
@@ -1224,8 +1637,11 @@ def ask_question():
         if question_type == "profile":
 
             profile = get_profile(
+
                 current_data,
-                source_files=all_uploaded_files
+
+                source_files=
+                    session_uploaded_files
             )
 
 
@@ -1247,21 +1663,30 @@ def ask_question():
             ):
 
                 most_missing = max(
-                    profile["column_details"],
-                    key=lambda detail: detail["missing"]
+
+                    profile[
+                        "column_details"
+                    ],
+
+                    key=lambda detail:
+                        detail["missing"]
                 )
-                column = most_missing["name"]
-                count = most_missing["missing"]
+
+
+                column = (
+                    most_missing["name"]
+                )
+
+                count = (
+                    most_missing["missing"]
+                )
 
 
                 answer = (
 
                     f"The column with the "
-
                     f"most missing values "
-
                     f"is '{column}' with "
-
                     f"{count} missing values."
 
                 )
@@ -1272,9 +1697,7 @@ def ask_question():
                 answer = (
 
                     f"The dataset has "
-
                     f"{profile['total_missing']} "
-
                     f"missing values."
 
                 )
@@ -1285,7 +1708,6 @@ def ask_question():
                 answer = (
 
                     f"The dataset has "
-
                     f"{profile['rows']} rows."
 
                 )
@@ -1296,7 +1718,6 @@ def ask_question():
                 answer = (
 
                     f"The dataset has "
-
                     f"{profile['columns']} columns."
 
                 )
@@ -1305,8 +1726,10 @@ def ask_question():
             else:
 
                 answer = (
+
                     "Dataset profile generated "
                     "successfully."
+
                 )
 
 
@@ -1346,9 +1769,13 @@ def ask_question():
             # REPAIR
             # --------------------------------------
 
-            if not output["success"]:
+            if (
+                not output["success"]
+                and not output.get("result_is_none")
+            ):
 
                 repair_prompt = f"""
+
 The generated pandas code failed.
 
 Question:
@@ -1368,6 +1795,7 @@ Rules:
 3. Use only pandas and numpy.
 4. Do not use files, network, OS or shell commands.
 5. Do not use exec or eval.
+
 """
 
 
@@ -1431,7 +1859,10 @@ Rules:
             # VERIFIED RESULT
             # --------------------------------------
 
-            if output["success"]:
+            if (
+                output["success"]
+                and output.get("result") is not None
+            ):
 
                 result_value = (
                     output["result"]
@@ -1557,7 +1988,10 @@ Rules:
 
 
         return jsonify({
-            "error": str(error)
+
+            "error":
+                str(error)
+
         }), 500
 
 
@@ -1599,5 +2033,8 @@ def history_data():
     except Exception as error:
 
         return jsonify({
-            "error": str(error)
+
+            "error":
+                str(error)
+
         }), 500

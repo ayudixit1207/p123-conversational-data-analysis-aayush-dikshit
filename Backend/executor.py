@@ -33,6 +33,13 @@ def execute_code(code, data):
             "result"
         )
 
+        if result is None:
+            return {
+                "success": False,
+                "error": "Generated code did not produce a result",
+                "result_is_none": True
+            }
+
         return {
             "success": True,
             "result": result
